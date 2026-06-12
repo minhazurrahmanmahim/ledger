@@ -72,12 +72,12 @@ function saveState(){
    (Firebase Console > Project settings > General > Your apps > SDK setup and configuration)
    ===================================================================== */
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAT6QydYvhgOa_yB92GcQva9dddB8amsYY",
+  authDomain: "mahims-ledger.firebaseapp.com",
+  projectId: "mahims-ledger",
+  storageBucket: "mahims-ledger.firebasestorage.app",
+  messagingSenderId: "13228923987",
+  appId: "1:13228923987:web:f430a25fda0e234cd63aa6"
 };
 
 const firebaseReady = (typeof firebase !== 'undefined');
