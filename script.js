@@ -27,7 +27,8 @@ function defaultState(){
       name: "মো. মিনহাজুর রহমান মাহিম",
       reminderEnabled: true,
       reminderTime: "21:00",
-      lastReminderDate: ""
+      lastReminderDate: "",
+      monthlyBudget: 0
     }
   };
 }
@@ -35,21 +36,25 @@ function defaultState(){
 let state = loadState();
 let snoozedToday = false; // রিমাইন্ডার পরে দেখানোর জন্য (সেশন-নির্ভর)
 
+function mergeWithDefaults(parsed){
+  const def = defaultState();
+  return {
+    entries: parsed.entries || [],
+    archive: parsed.archive || [],
+    tours: parsed.tours || [],
+    categories: (parsed.categories && parsed.categories.length) ? parsed.categories : def.categories,
+    contacts: parsed.contacts || [],
+    settings: { ...def.settings, ...(parsed.settings || {}) }
+  };
+}
+
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return defaultState();
     const parsed = JSON.parse(raw);
     // ডিফল্ট কী-গুলো নিশ্চিত করা (পুরোনো ডেটার সাথে সামঞ্জস্যের জন্য)
-    const def = defaultState();
-    return {
-      entries: parsed.entries || [],
-      archive: parsed.archive || [],
-      tours: parsed.tours || [],
-      categories: (parsed.categories && parsed.categories.length) ? parsed.categories : def.categories,
-      contacts: parsed.contacts || [],
-      settings: { ...def.settings, ...(parsed.settings || {}) }
-    };
+    return mergeWithDefaults(parsed);
   }catch(e){
     console.error("স্টেট লোড করতে সমস্যা হয়েছে:", e);
     return defaultState();
@@ -58,9 +63,204 @@ function loadState(){
 
 function saveState(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  syncToCloud();
 }
 
-/* ===================== ইউটিলিটি ===================== */
+/* =====================================================================
+   ফায়ারবেস — ক্লাউড সিঙ্ক
+   নিচের কনফিগারেশনে আপনার Firebase প্রজেক্টের তথ্য বসান
+   (Firebase Console > Project settings > General > Your apps > SDK setup and configuration)
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+const firebaseReady = (typeof firebase !== 'undefined');
+let auth = null, db = null;
+if(firebaseReady){
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db = firebase.firestore();
+}
+
+let currentUser = null;
+let firestoreUnsub = null;
+let saveDebounceTimer = null;
+let isApplyingRemoteUpdate = false;
+
+function setSyncStatus(status){
+  const el = document.getElementById('syncStatus');
+  const icon = document.getElementById('syncIcon');
+  const text = document.getElementById('syncText');
+  if(!el) return;
+  el.classList.remove('synced','syncing','error');
+  if(status === 'syncing'){
+    el.classList.add('syncing');
+    icon.setAttribute('data-lucide','refresh-cw');
+    text.textContent = 'সিঙ্ক হচ্ছে...';
+  } else if(status === 'synced'){
+    el.classList.add('synced');
+    icon.setAttribute('data-lucide','cloud-check');
+    text.textContent = 'সিঙ্ক সম্পন্ন';
+  } else if(status === 'error'){
+    el.classList.add('error');
+    icon.setAttribute('data-lucide','cloud-off');
+    text.textContent = 'সিঙ্ক ব্যর্থ';
+  }
+  refreshIcons();
+}
+
+function syncToCloud(){
+  if(!firebaseReady || !currentUser || isApplyingRemoteUpdate) return;
+  setSyncStatus('syncing');
+  clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(() => {
+    db.collection('users').doc(currentUser.uid).set({
+      state: state,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(() => setSyncStatus('synced'))
+      .catch(err => { console.error("ক্লাউড সিঙ্ক সমস্যা:", err); setSyncStatus('error'); });
+  }, 800);
+}
+
+function translateAuthError(err){
+  const map = {
+    'auth/invalid-email': 'ইমেইল ঠিকানা সঠিক নয়।',
+    'auth/missing-password': 'পাসওয়ার্ড দিন।',
+    'auth/weak-password': 'পাসওয়ার্ড কমপক্ষে ৬ ডিজিট হতে হবে।',
+    'auth/email-already-in-use': 'এই ইমেইল দিয়ে আগেই অ্যাকাউন্ট তৈরি হয়েছে — অনুগ্রহ করে লগইন করুন।',
+    'auth/invalid-credential': 'ইমেইল বা পাসওয়ার্ড ভুল।',
+    'auth/wrong-password': 'ইমেইল বা পাসওয়ার্ড ভুল।',
+    'auth/user-not-found': 'এই ইমেইলে কোনো অ্যাকাউন্ট পাওয়া যায়নি — নতুন অ্যাকাউন্ট তৈরি করুন।',
+    'auth/too-many-requests': 'অনেকবার চেষ্টা করা হয়েছে, কিছুক্ষণ পর আবার চেষ্টা করুন।',
+    'auth/network-request-failed': 'ইন্টারনেট সংযোগ নেই, চেক করে আবার চেষ্টা করুন।'
+  };
+  return map[err.code] || ('সমস্যা হয়েছে: ' + err.message);
+}
+
+function setupAuthUI(){
+  const overlay        = document.getElementById('authOverlay');
+  const emailInput     = document.getElementById('authEmail');
+  const passwordInput  = document.getElementById('authPassword');
+  const errorEl        = document.getElementById('authError');
+  const loginBtn       = document.getElementById('authLoginBtn');
+  const signupBtn      = document.getElementById('authSignupBtn');
+  const forgotBtn      = document.getElementById('authForgotBtn');
+  const loadingEl      = document.getElementById('authLoading');
+  const accountEmailEl = document.getElementById('accountEmail');
+  const logoutBtn      = document.getElementById('logoutBtn');
+
+  if(!firebaseReady){
+    // ক্লাউড সিঙ্ক লোড হয়নি (ইন্টারনেট/CDN সমস্যা) — অফলাইন (লোকাল) মোডে চলবে
+    overlay.classList.add('hidden');
+    accountEmailEl.value = 'অফলাইন মোড (ইন্টারনেট সংযোগ চেক করুন)';
+    setSyncStatus('error');
+    return;
+  }
+
+  function showError(msg){ errorEl.textContent = msg || ''; }
+  function setLoading(on){ loadingEl.style.display = on ? 'flex' : 'none'; }
+
+  loginBtn.addEventListener('click', () => {
+    const email = emailInput.value.trim();
+    const pass  = passwordInput.value;
+    showError('');
+    if(!email || !pass){ showError('ইমেইল ও পাসওয়ার্ড দিন।'); return; }
+    setLoading(true);
+    auth.signInWithEmailAndPassword(email, pass)
+      .catch(err => showError(translateAuthError(err)))
+      .finally(() => setLoading(false));
+  });
+
+  signupBtn.addEventListener('click', () => {
+    const email = emailInput.value.trim();
+    const pass  = passwordInput.value;
+    showError('');
+    if(!email || !pass){ showError('ইমেইল ও পাসওয়ার্ড দিন।'); return; }
+    if(pass.length < 6){ showError('পাসওয়ার্ড কমপক্ষে ৬ ডিজিট হতে হবে।'); return; }
+    setLoading(true);
+    auth.createUserWithEmailAndPassword(email, pass)
+      .catch(err => showError(translateAuthError(err)))
+      .finally(() => setLoading(false));
+  });
+
+  forgotBtn.addEventListener('click', () => {
+    const email = emailInput.value.trim();
+    showError('');
+    if(!email){ showError('পাসওয়ার্ড রিসেট লিংক পাঠানোর জন্য উপরে ইমেইল লিখুন।'); return; }
+    setLoading(true);
+    auth.sendPasswordResetEmail(email)
+      .then(() => showError('রিসেট লিংক ইমেইলে পাঠানো হয়েছে — ইনবক্স চেক করুন।'))
+      .catch(err => showError(translateAuthError(err)))
+      .finally(() => setLoading(false));
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    openConfirm(
+      'লগআউট নিশ্চিত করুন',
+      'আপনি কি লগআউট করতে চান? পরবর্তীতে একই ইমেইল-পাসওয়ার্ড দিয়ে লগইন করলে আপনার সব ডেটা ফিরে পাবেন।',
+      () => auth.signOut()
+    );
+  });
+
+  auth.onAuthStateChanged(user => {
+    if(firestoreUnsub){ firestoreUnsub(); firestoreUnsub = null; }
+    if(user){
+      currentUser = user;
+      overlay.classList.add('hidden');
+      accountEmailEl.value = user.email || '';
+      emailInput.value = '';
+      passwordInput.value = '';
+      setSyncStatus('syncing');
+
+      firestoreUnsub = db.collection('users').doc(user.uid).onSnapshot(docSnap => {
+        isApplyingRemoteUpdate = true;
+        if(docSnap.exists && docSnap.data().state){
+          state = mergeWithDefaults(docSnap.data().state);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } else {
+          // ক্লাউডে এখনো কোনো ডেটা নেই — বর্তমান (লোকাল) ডেটা ক্লাউডে পাঠানো হচ্ছে
+          db.collection('users').doc(user.uid).set({
+            state: state,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
+        renderAll();
+        loadSettingsForm();
+        isApplyingRemoteUpdate = false;
+        setSyncStatus('synced');
+      }, err => {
+        console.error("ফায়ারস্টোর সিঙ্ক সমস্যা:", err);
+        setSyncStatus('error');
+      });
+    } else {
+      currentUser = null;
+      overlay.classList.remove('hidden');
+      setSyncStatus('error');
+    }
+  });
+}
+
+/* ===================== আইকন (Lucide) — নিরাপদ লোডার ===================== */
+// আইকন CDN ধীরে লোড হলেও যাতে অ্যাপ ক্র্যাশ না করে এবং
+// আইকন লোড হওয়ার সাথে সাথেই (পরে হলেও) যাতে দেখানো যায়, তার জন্য এই হেল্পার।
+let _iconRetryCount = 0;
+function refreshIcons(){
+  if(window.lucide && typeof lucide.createIcons === 'function'){
+    lucide.createIcons();
+  } else if(_iconRetryCount < 40){
+    // আইকন লাইব্রেরি এখনো লোড হয়নি — কিছুক্ষণ পর আবার চেষ্টা করা হবে
+    _iconRetryCount++;
+    setTimeout(refreshIcons, 250);
+  }
+}
+
+
 function uid(){
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
@@ -290,7 +490,7 @@ function resetEntryForm(){
   document.querySelectorAll('#entryTypeControl .seg').forEach(s => s.classList.toggle('active', s.dataset.value === 'expense'));
   updateEntryFormForType();
   entryFormTitle.innerHTML = `<i data-lucide="pencil-line"></i> নতুন এন্ট্রি যোগ করুন`;
-  lucide.createIcons();
+  refreshIcons();
 }
 
 document.getElementById('resetFormBtn').addEventListener('click', resetEntryForm);
@@ -363,7 +563,7 @@ function editEntry(id){
     entryTourCatSel.value = entry.tourCategory || 'ভাড়া';
   }
   entryFormTitle.innerHTML = `<i data-lucide="pencil-line"></i> এন্ট্রি সম্পাদনা করুন`;
-  lucide.createIcons();
+  refreshIcons();
   goToPage('add-entry');
 }
 
@@ -424,6 +624,33 @@ function renderDashboard(){
   document.getElementById('statMonthExpense').textContent = taka(monthExpense);
   document.getElementById('statTotalReceivable').textContent = taka(totalReceivable);
   document.getElementById('statTotalPayable').textContent = taka(totalPayable);
+
+  // মাসিক বাজেট
+  const budget = state.settings.monthlyBudget || 0;
+  const budgetEmpty = document.getElementById('budgetEmptyState');
+  const budgetContent = document.getElementById('budgetContent');
+  if(budget <= 0){
+    budgetEmpty.style.display = 'block';
+    budgetContent.style.display = 'none';
+  } else {
+    budgetEmpty.style.display = 'none';
+    budgetContent.style.display = 'block';
+    const pct = Math.min(100, (monthExpense / budget) * 100);
+    const fill = document.getElementById('budgetProgressFill');
+    fill.style.width = pct + '%';
+    fill.classList.toggle('over-budget', monthExpense > budget);
+    document.getElementById('budgetSpentLabel').textContent = `খরচ হয়েছে: ${taka(monthExpense)}`;
+    document.getElementById('budgetTotalLabel').textContent = `বাজেট: ${taka(budget)}`;
+    const remainText = document.getElementById('budgetRemainingText');
+    const remain = budget - monthExpense;
+    if(remain >= 0){
+      remainText.textContent = `অবশিষ্ট আছে: ${taka(remain)} (এই মাসের জন্য)`;
+      remainText.className = 'budget-remaining ok';
+    } else {
+      remainText.textContent = `বাজেট অতিক্রম হয়েছে: ${taka(Math.abs(remain))}`;
+      remainText.className = 'budget-remaining over';
+    }
+  }
 
   // রিমাইন্ডার স্ট্যাটাস
   const reminderText = document.getElementById('reminderStatusText');
@@ -626,7 +853,7 @@ function renderTours(){
   wrap.querySelectorAll('[data-action="edit"]').forEach(b => b.addEventListener('click', () => editEntry(b.dataset.id)));
   wrap.querySelectorAll('[data-action="delete"]').forEach(b => b.addEventListener('click', () => deleteEntry(b.dataset.id)));
   wrap.querySelectorAll('[data-action="delete-tour"]').forEach(b => b.addEventListener('click', () => deleteTour(b.dataset.id)));
-  lucide.createIcons();
+  refreshIcons();
 }
 
 function deleteTour(tourId){
@@ -729,7 +956,7 @@ function renderCategories(){
       }
     }
   });
-  lucide.createIcons();
+  refreshIcons();
 }
 
 /* =====================================================================
@@ -874,6 +1101,51 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
   window.print();
 });
 
+/* ----- CSV এক্সপোর্ট ----- */
+document.getElementById('downloadCsvBtn').addEventListener('click', () => {
+  if(currentFilteredEntries.length === 0) renderReportTable();
+  const rows = currentFilteredEntries.length ? currentFilteredEntries : state.entries;
+
+  if(rows.length === 0){
+    toast('ডাউনলোডের জন্য কোনো তথ্য পাওয়া যায়নি।');
+    return;
+  }
+
+  const header = ['তারিখ','সময়','ধরন','খাত/ব্যক্তি','নোট','পরিমাণ'];
+  const csvRows = [header.map(csvEscape).join(',')];
+  rows.forEach(e => {
+    csvRows.push([
+      formatDateDMY(e.date),
+      e.time || '',
+      entryKindLabel(e.kind),
+      e.kind === 'expense' ? (e.category || '') : (e.person || ''),
+      e.note || '',
+      e.amount
+    ].map(csvEscape).join(','));
+  });
+
+  // এক্সেলে বাংলা সঠিকভাবে দেখানোর জন্য UTF-8 BOM যুক্ত করা হলো
+  const csvContent = '\uFEFF' + csvRows.join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mahims-ledger-statement-${todayStr()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('CSV ফাইল ডাউনলোড হয়েছে।');
+});
+
+function csvEscape(val){
+  const s = String(val ?? '');
+  if(/[",\n\r]/.test(s)){
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
 /* =====================================================================
    কন্টাক্টস
    ===================================================================== */
@@ -940,7 +1212,7 @@ function renderContacts(){
       renderAll();
     });
   }));
-  lucide.createIcons();
+  refreshIcons();
 }
 
 /* ----- গুগল কন্টাক্টস CSV ইম্পোর্ট ----- */
@@ -1054,7 +1326,7 @@ function renderArchive(){
       renderAll();
     });
   }));
-  lucide.createIcons();
+  refreshIcons();
 }
 
 /* =====================================================================
@@ -1062,12 +1334,14 @@ function renderArchive(){
    ===================================================================== */
 function loadSettingsForm(){
   document.getElementById('settingName').value = state.settings.name;
+  document.getElementById('settingMonthlyBudget').value = state.settings.monthlyBudget || '';
   document.getElementById('reminderEnabled').checked = state.settings.reminderEnabled;
   document.getElementById('reminderTime').value = state.settings.reminderTime;
 }
 
 document.getElementById('saveSettingsBtn').addEventListener('click', () => {
   state.settings.name = document.getElementById('settingName').value.trim() || state.settings.name;
+  state.settings.monthlyBudget = Math.max(0, Number(document.getElementById('settingMonthlyBudget').value) || 0);
   state.settings.reminderEnabled = document.getElementById('reminderEnabled').checked;
   state.settings.reminderTime = document.getElementById('reminderTime').value || '21:00';
   saveState();
@@ -1194,7 +1468,7 @@ function renderAll(){
   renderContacts();
   renderArchive();
   populateContactDatalist();
-  lucide.createIcons();
+  refreshIcons();
 }
 
 /* =====================================================================
@@ -1211,10 +1485,12 @@ function init(){
 
   loadSettingsForm();
   renderAll();
-  lucide.createIcons();
+  refreshIcons();
 
   checkReminder();
   setInterval(checkReminder, 60 * 1000);
+
+  setupAuthUI();
 }
 
 init();

@@ -11,17 +11,51 @@
 <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- Tailwind CSS (CDN) -->
-<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.tailwindcss.com" defer></script>
 
 <!-- Chart.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" defer></script>
 
-<!-- Lucide আইকন -->
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<!-- Lucide আইকন (পিন করা ভার্সন, দ্রুত ও স্থিতিশীল CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js" defer></script>
+
+<!-- Firebase (ক্লাউড সিঙ্ক) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" defer></script>
 
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
+<!-- ============ লগইন / সাইন-আপ ওভারলে ============ -->
+<div id="authOverlay" class="auth-overlay">
+  <div class="auth-card">
+    <div class="seal auth-seal">মি.মা.</div>
+    <h1 class="auth-title">মাহিম'স লেজার</h1>
+    <p class="auth-subtitle">ক্লাউড সিঙ্ক চালু করতে লগইন করুন — যেকোনো ডিভাইস থেকে একই হিসাব দেখতে ও আপডেট করতে পারবেন।</p>
+
+    <div class="form-grid">
+      <div class="form-row">
+        <label for="authEmail">ইমেইল</label>
+        <input type="email" id="authEmail" autocomplete="username" placeholder="example@email.com" />
+      </div>
+      <div class="form-row">
+        <label for="authPassword">পাসওয়ার্ড</label>
+        <input type="password" id="authPassword" autocomplete="current-password" placeholder="কমপক্ষে ৬ ডিজিট" />
+      </div>
+    </div>
+
+    <p id="authError" class="auth-error"></p>
+
+    <div class="auth-actions">
+      <button class="btn btn-primary" id="authLoginBtn"><i data-lucide="log-in"></i> প্রবেশ করুন</button>
+      <button class="btn btn-ghost" id="authSignupBtn"><i data-lucide="user-plus"></i> নতুন অ্যাকাউন্ট তৈরি করুন</button>
+    </div>
+    <button class="auth-forgot" id="authForgotBtn">পাসওয়ার্ড ভুলে গেছেন?</button>
+    <p class="auth-loading" id="authLoading" style="display:none;"><i data-lucide="loader-circle" class="spin"></i> অপেক্ষা করুন...</p>
+  </div>
+</div>
 
 <div id="app" class="app-shell">
 
@@ -85,6 +119,10 @@
         <h2 id="pageTitle">ড্যাশবোর্ড</h2>
         <p id="pageDate"></p>
       </div>
+      <div class="sync-status" id="syncStatus" title="ক্লাউড সিঙ্ক স্ট্যাটাস">
+        <i data-lucide="cloud" id="syncIcon"></i>
+        <span id="syncText">সিঙ্ক হচ্ছে...</span>
+      </div>
       <button class="bell-btn" id="bellBtn" title="রিমাইন্ডার সেটিংস">
         <i data-lucide="bell"></i>
       </button>
@@ -133,6 +171,24 @@
         </div>
 
         <div class="dashboard-grid">
+          <div class="ledger-card budget-card">
+            <div class="card-head">
+              <h3><i data-lucide="target"></i> মাসিক বাজেট</h3>
+              <button class="link-btn" data-page="settings">সেট করুন</button>
+            </div>
+            <div id="budgetEmptyState" class="hint-text" style="display:none;">এখনো কোনো মাসিক বাজেট নির্ধারণ করা হয়নি। সেটিংস পেজ থেকে বাজেট সেট করুন।</div>
+            <div id="budgetContent">
+              <div class="budget-row">
+                <span id="budgetSpentLabel">খরচ হয়েছে: ৳ ০</span>
+                <span id="budgetTotalLabel">বাজেট: ৳ ০</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" id="budgetProgressFill" style="width:0%"></div>
+              </div>
+              <p class="budget-remaining" id="budgetRemainingText"></p>
+            </div>
+          </div>
+
           <div class="ledger-card reminder-card">
             <div class="card-head">
               <h3><i data-lucide="bell-ring"></i> দৈনিক রিমাইন্ডার</h3>
@@ -351,7 +407,10 @@
         <div class="ledger-card">
           <div class="card-head">
             <h3><i data-lucide="file-text"></i> বিস্তারিত স্টেটমেন্ট</h3>
-            <button class="btn btn-primary" id="downloadPdfBtn"><i data-lucide="printer"></i> পিডিএফ ডাউনলোড / প্রিন্ট</button>
+            <div class="report-export-actions">
+              <button class="btn btn-ghost" id="downloadCsvBtn"><i data-lucide="sheet"></i> CSV ডাউনলোড</button>
+              <button class="btn btn-primary" id="downloadPdfBtn"><i data-lucide="printer"></i> পিডিএফ ডাউনলোড / প্রিন্ট</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table class="ledger-table" id="reportTable">
@@ -418,11 +477,29 @@
       <!-- ================= সেটিংস ================= -->
       <section class="page" id="settings">
         <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="cloud"></i> অ্যাকাউন্ট ও ক্লাউড সিঙ্ক</h3></div>
+          <p class="hint-text">আপনার ডেটা ক্লাউডে নিরাপদে সংরক্ষিত আছে। একই ইমেইল-পাসওয়ার্ড দিয়ে যেকোনো ডিভাইস থেকে লগইন করলে সর্বশেষ আপডেটেড তথ্য দেখতে পাবেন।</p>
+          <div class="form-grid">
+            <div class="form-row">
+              <label>লগইন করা ইমেইল</label>
+              <input type="text" id="accountEmail" readonly />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-danger" id="logoutBtn"><i data-lucide="log-out"></i> লগআউট করুন</button>
+          </div>
+        </div>
+
+        <div class="ledger-card form-card">
           <div class="card-head"><h3><i data-lucide="user-cog"></i> প্রোফাইল</h3></div>
           <div class="form-grid">
             <div class="form-row">
               <label for="settingName">আপনার নাম</label>
               <input type="text" id="settingName" />
+            </div>
+            <div class="form-row">
+              <label for="settingMonthlyBudget">মাসিক বাজেট (৳)</label>
+              <input type="number" id="settingMonthlyBudget" min="0" step="1" placeholder="যেমন: ১৫০০০" />
             </div>
           </div>
         </div>
@@ -504,6 +581,6 @@
   <div class="print-summary" id="printSummary"></div>
 </div>
 
-<script src="script.js"></script>
+<script src="script.js" defer></script>
 </body>
 </html>
