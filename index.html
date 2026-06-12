@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ব্যক্তিগত হিসাব-খাতা | মো. মিনহাজুর রহমান মাহিম</title>
+
+<!-- ফন্ট -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Tailwind CSS (CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+
+<!-- Lucide আইকন -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app" class="app-shell">
+
+  <!-- ============ সাইডবার ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="seal">মি.মা.</div>
+      <div class="brand-text">
+        <h1>মাহিম'স লেজার</h1>
+        <p>ব্যক্তিগত হিসাব-খাতা</p>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-page="dashboard">
+        <i data-lucide="layout-dashboard"></i><span>ড্যাশবোর্ড</span>
+      </button>
+      <button class="nav-item" data-page="add-entry">
+        <i data-lucide="circle-plus"></i><span>নতুন এন্ট্রি</span>
+      </button>
+      <button class="nav-item" data-page="receivables">
+        <i data-lucide="handshake"></i><span>পাই ও পাওনা</span>
+      </button>
+      <button class="nav-item" data-page="tours">
+        <i data-lucide="map"></i><span>ট্যুর হিসাব</span>
+      </button>
+      <button class="nav-item" data-page="categories">
+        <i data-lucide="tags"></i><span>ক্যাটাগরি</span>
+      </button>
+      <button class="nav-item" data-page="reports">
+        <i data-lucide="bar-chart-3"></i><span>পরিসংখ্যান ও রিপোর্ট</span>
+      </button>
+      <button class="nav-item" data-page="contacts">
+        <i data-lucide="users"></i><span>কন্টাক্টস</span>
+      </button>
+      <button class="nav-item" data-page="archive">
+        <i data-lucide="archive"></i><span>আর্কাইভ</span>
+      </button>
+      <button class="nav-item" data-page="settings">
+        <i data-lucide="settings"></i><span>সেটিংস</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <p>সব তথ্য আপনার ব্রাউজারেই (LocalStorage) সংরক্ষিত থাকে। কোনো সার্ভারে পাঠানো হয় না।</p>
+    </div>
+  </aside>
+
+  <!-- মোবাইল ওভারলে -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- ============ মূল কনটেন্ট ============ -->
+  <main class="main-content">
+
+    <!-- টপ-বার -->
+    <header class="topbar">
+      <button class="hamburger" id="hamburgerBtn" aria-label="মেনু খুলুন">
+        <i data-lucide="menu"></i>
+      </button>
+      <div class="topbar-title">
+        <h2 id="pageTitle">ড্যাশবোর্ড</h2>
+        <p id="pageDate"></p>
+      </div>
+      <button class="bell-btn" id="bellBtn" title="রিমাইন্ডার সেটিংস">
+        <i data-lucide="bell"></i>
+      </button>
+    </header>
+
+    <div class="page-container">
+
+      <!-- ================= ড্যাশবোর্ড ================= -->
+      <section class="page active" id="dashboard">
+        <div class="welcome-row">
+          <div>
+            <p class="eyebrow">শুভেচ্ছা,</p>
+            <h2 class="display-name" id="dashName">মো. মিনহাজুর রহমান মাহিম</h2>
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-icon"><i data-lucide="wallet"></i></div>
+            <div>
+              <p class="stat-label">আজকের মোট খরচ</p>
+              <p class="stat-value" id="statTodayExpense">৳ ০</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon income"><i data-lucide="arrow-down-to-line"></i></div>
+            <div>
+              <p class="stat-label">মোট পাই (অন্যের কাছে)</p>
+              <p class="stat-value income" id="statTotalReceivable">৳ ০</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon expense"><i data-lucide="arrow-up-from-line"></i></div>
+            <div>
+              <p class="stat-label">মোট পাওনা (আমার কাছে)</p>
+              <p class="stat-value expense" id="statTotalPayable">৳ ০</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon"><i data-lucide="calendar-days"></i></div>
+            <div>
+              <p class="stat-label">এই মাসের মোট খরচ</p>
+              <p class="stat-value" id="statMonthExpense">৳ ০</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="ledger-card reminder-card">
+            <div class="card-head">
+              <h3><i data-lucide="bell-ring"></i> দৈনিক রিমাইন্ডার</h3>
+            </div>
+            <p id="reminderStatusText">আজকের সব খরচ এন্ট্রি করা শেষ হয়েছে কি?</p>
+            <div class="reminder-actions">
+              <button class="btn btn-primary" id="markDoneBtn">আজকের এন্ট্রি সম্পন্ন</button>
+              <button class="btn btn-ghost" id="enableNotifBtn">ব্রাউজার নোটিফিকেশন চালু করুন</button>
+            </div>
+          </div>
+
+          <div class="ledger-card">
+            <div class="card-head">
+              <h3><i data-lucide="history"></i> সাম্প্রতিক লেনদেন</h3>
+              <button class="link-btn" data-page="add-entry">+ নতুন</button>
+            </div>
+            <div id="recentEntries" class="entry-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= নতুন এন্ট্রি ================= -->
+      <section class="page" id="add-entry">
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3 id="entryFormTitle"><i data-lucide="pencil-line"></i> নতুন এন্ট্রি যোগ করুন</h3></div>
+          <form id="entryForm">
+            <input type="hidden" id="entryId" />
+
+            <div class="form-row">
+              <label>ধরন</label>
+              <div class="seg-control" id="entryTypeControl">
+                <button type="button" class="seg active" data-value="expense">খরচ</button>
+                <button type="button" class="seg" data-value="receivable">আমি পাবো (পাই)</button>
+                <button type="button" class="seg" data-value="payable">আমি দেব (পাওনা)</button>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-row" id="categoryRow">
+                <label for="entryCategory">খাত (Category)</label>
+                <select id="entryCategory"></select>
+              </div>
+              <div class="form-row" id="personRow" style="display:none;">
+                <label for="entryPerson">ব্যক্তি</label>
+                <input type="text" id="entryPerson" list="contactList" placeholder="নাম লিখুন বা কন্টাক্ট থেকে বাছুন" />
+                <datalist id="contactList"></datalist>
+              </div>
+              <div class="form-row">
+                <label for="entryAmount">পরিমাণ (৳)</label>
+                <input type="number" min="0" step="0.01" id="entryAmount" required placeholder="০.০০" />
+              </div>
+              <div class="form-row">
+                <label for="entryDate">তারিখ</label>
+                <input type="date" id="entryDate" required />
+              </div>
+              <div class="form-row">
+                <label for="entryTime">সময়</label>
+                <input type="time" id="entryTime" required />
+              </div>
+              <div class="form-row checkbox-row">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="entryIsTour" />
+                  <span>এটি একটি ট্যুর সম্পর্কিত খরচ</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-grid tour-fields" id="tourFields" style="display:none;">
+              <div class="form-row">
+                <label for="entryTour">ট্যুর নির্বাচন করুন</label>
+                <select id="entryTour"></select>
+              </div>
+              <div class="form-row">
+                <label for="entryTourCategory">ট্যুর খাত</label>
+                <select id="entryTourCategory">
+                  <option value="ভাড়া">ভাড়া</option>
+                  <option value="খাবার">খাবার</option>
+                  <option value="হোটেল">হোটেল</option>
+                  <option value="অন্যান্য">অন্যান্য</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <label for="entryNote">নোট</label>
+              <textarea id="entryNote" rows="3" placeholder="বিস্তারিত নোট (ঐচ্ছিক)"></textarea>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> সংরক্ষণ করুন</button>
+              <button type="button" class="btn btn-ghost" id="resetFormBtn">রিসেট</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="ledger-card">
+          <div class="card-head"><h3><i data-lucide="list"></i> সব খরচের তালিকা</h3></div>
+          <div class="table-toolbar">
+            <input type="text" id="expenseSearch" placeholder="খাত বা নোট অনুসন্ধান করুন..." />
+          </div>
+          <div class="table-wrap">
+            <table class="ledger-table" id="expenseTable">
+              <thead>
+                <tr><th>তারিখ</th><th>সময়</th><th>খাত</th><th>নোট</th><th class="num">পরিমাণ</th><th></th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= পাই ও পাওনা ================= -->
+      <section class="page" id="receivables">
+        <div class="dashboard-grid two-col">
+          <div class="ledger-card">
+            <div class="card-head">
+              <h3><i data-lucide="arrow-down-to-line"></i> যাদের কাছে আমি পাব</h3>
+              <span class="badge income" id="receivableTotal">৳ ০</span>
+            </div>
+            <div id="receivableList" class="entry-list"></div>
+          </div>
+          <div class="ledger-card">
+            <div class="card-head">
+              <h3><i data-lucide="arrow-up-from-line"></i> যাদের আমি দেব</h3>
+              <span class="badge expense" id="payableTotal">৳ ০</span>
+            </div>
+            <div id="payableList" class="entry-list"></div>
+          </div>
+        </div>
+        <p class="hint-text"><i data-lucide="info"></i> নতুন পাই/পাওনা যোগ করতে "নতুন এন্ট্রি" পেজে গিয়ে ধরন থেকে "আমি পাবো" বা "আমি দেব" নির্বাচন করুন। পরিশোধ হয়ে গেলে এখান থেকে "পরিশোধ হয়েছে" বাটনে ক্লিক করুন — তখন আইটেমটি আর্কাইভে চলে যাবে।</p>
+      </section>
+
+      <!-- ================= ট্যুর হিসাব ================= -->
+      <section class="page" id="tours">
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="map-pin-plus"></i> নতুন ট্যুর যোগ করুন</h3></div>
+          <form id="tourForm" class="form-grid">
+            <div class="form-row">
+              <label for="tourName">ট্যুরের নাম</label>
+              <input type="text" id="tourName" required placeholder="যেমন: কক্সবাজার ট্যুর ২০২৬" />
+            </div>
+            <div class="form-row">
+              <label for="tourStart">শুরুর তারিখ</label>
+              <input type="date" id="tourStart" required />
+            </div>
+            <div class="form-row">
+              <label for="tourEnd">শেষের তারিখ</label>
+              <input type="date" id="tourEnd" />
+            </div>
+            <div class="form-row" style="align-self:flex-end;">
+              <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> ট্যুর তৈরি করুন</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="tourCardsWrap"></div>
+      </section>
+
+      <!-- ================= ক্যাটাগরি ================= -->
+      <section class="page" id="categories">
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="tag-plus"></i> নতুন ক্যাটাগরি যোগ করুন</h3></div>
+          <form id="categoryForm" class="inline-form">
+            <input type="text" id="categoryName" required placeholder="যেমন: ফ্রিল্যান্সিং খরচ" />
+            <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> যুক্ত করুন</button>
+          </form>
+        </div>
+
+        <div class="dashboard-grid two-col">
+          <div class="ledger-card">
+            <div class="card-head"><h3><i data-lucide="list-tree"></i> খাতভিত্তিক মোট খরচ (সর্বমোট)</h3></div>
+            <div id="categoryList" class="entry-list"></div>
+          </div>
+          <div class="ledger-card">
+            <div class="card-head"><h3><i data-lucide="pie-chart"></i> খাতভিত্তিক চার্ট</h3></div>
+            <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= রিপোর্ট ================= -->
+      <section class="page" id="reports">
+        <div class="ledger-card">
+          <div class="card-head"><h3><i data-lucide="sliders-horizontal"></i> ফিল্টার</h3></div>
+          <div class="form-grid">
+            <div class="form-row">
+              <label for="reportFrom">শুরুর তারিখ</label>
+              <input type="date" id="reportFrom" />
+            </div>
+            <div class="form-row">
+              <label for="reportTo">শেষের তারিখ</label>
+              <input type="date" id="reportTo" />
+            </div>
+            <div class="form-row">
+              <label for="reportCategory">ক্যাটাগরি</label>
+              <select id="reportCategory"><option value="all">সব ক্যাটাগরি</option></select>
+            </div>
+            <div class="form-row" style="align-self:flex-end; gap:.5rem; display:flex;">
+              <button class="btn btn-primary" id="applyFilterBtn"><i data-lucide="filter"></i> ফিল্টার করুন</button>
+              <button class="btn btn-ghost" id="clearFilterBtn">মুছুন</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid two-col">
+          <div class="ledger-card">
+            <div class="card-head"><h3><i data-lucide="bar-chart-3"></i> মাসিক খরচ (চলতি বছর)</h3></div>
+            <div class="chart-wrap"><canvas id="monthlyChart"></canvas></div>
+          </div>
+          <div class="ledger-card">
+            <div class="card-head"><h3><i data-lucide="calendar-range"></i> বাৎসরিক খরচ (সর্বমোট)</h3></div>
+            <div class="chart-wrap"><canvas id="yearlyChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="ledger-card">
+          <div class="card-head">
+            <h3><i data-lucide="file-text"></i> বিস্তারিত স্টেটমেন্ট</h3>
+            <button class="btn btn-primary" id="downloadPdfBtn"><i data-lucide="printer"></i> পিডিএফ ডাউনলোড / প্রিন্ট</button>
+          </div>
+          <div class="table-wrap">
+            <table class="ledger-table" id="reportTable">
+              <thead><tr><th>তারিখ</th><th>সময়</th><th>ধরন</th><th>খাত / ব্যক্তি</th><th>নোট</th><th class="num">পরিমাণ</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= কন্টাক্টস ================= -->
+      <section class="page" id="contacts">
+        <div class="ledger-card">
+          <div class="card-head"><h3><i data-lucide="upload"></i> গুগল কন্টাক্টস (CSV) ইম্পোর্ট করুন</h3></div>
+          <p class="hint-text">গুগল কন্টাক্টস থেকে এক্সপোর্ট করা CSV ফাইল এখানে আপলোড করুন। নাম ও ফোন নম্বর কলাম স্বয়ংক্রিয়ভাবে চিহ্নিত করে যুক্ত হবে। পদ্ধতির বিস্তারিত নিচে দেওয়া আছে।</p>
+          <input type="file" id="csvFileInput" accept=".csv" class="file-input" />
+          <details class="how-to">
+            <summary>কীভাবে গুগল কন্টাক্টস থেকে CSV এক্সপোর্ট করবেন?</summary>
+            <ol>
+              <li>কম্পিউটার থেকে <strong>contacts.google.com</strong> এ যান।</li>
+              <li>বাম পাশের মেনু থেকে <strong>Export</strong> অপশনে ক্লিক করুন।</li>
+              <li>"Contacts" বা "Selected contacts" নির্বাচন করুন, এবং ফরম্যাট হিসেবে <strong>Google CSV</strong> বেছে নিন।</li>
+              <li>"Export" বাটনে ক্লিক করলে একটি .csv ফাইল ডাউনলোড হবে।</li>
+              <li>সেই ফাইলটি উপরের বক্সে আপলোড করুন — নাম ও মোবাইল নম্বর স্বয়ংক্রিয়ভাবে যুক্ত হয়ে যাবে।</li>
+            </ol>
+          </details>
+        </div>
+
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="user-plus"></i> নতুন কন্টাক্ট যুক্ত করুন</h3></div>
+          <form id="contactForm" class="inline-form">
+            <input type="hidden" id="contactId" />
+            <input type="text" id="contactName" required placeholder="নাম" />
+            <input type="text" id="contactPhone" required placeholder="মোবাইল নম্বর" />
+            <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> যুক্ত করুন</button>
+          </form>
+        </div>
+
+        <div class="ledger-card">
+          <div class="card-head">
+            <h3><i data-lucide="contact"></i> কন্টাক্ট তালিকা</h3>
+            <input type="text" id="contactSearch" placeholder="অনুসন্ধান করুন..." class="small-search" />
+          </div>
+          <div id="contactsList" class="entry-list"></div>
+        </div>
+      </section>
+
+      <!-- ================= আর্কাইভ ================= -->
+      <section class="page" id="archive">
+        <div class="ledger-card">
+          <div class="card-head">
+            <h3><i data-lucide="archive"></i> মুছে ফেলা / পরিবর্তিত এন্ট্রি</h3>
+          </div>
+          <p class="hint-text"><i data-lucide="info"></i> এখানে এমন এন্ট্রি জমা থাকে যেগুলো এডিট বা ডিলিট করা হয়েছে — কোনো ডেটা স্থায়ীভাবে হারিয়ে যায় না। প্রয়োজনে পুনরুদ্ধার (Restore) করতে পারবেন।</p>
+          <div class="table-wrap">
+            <table class="ledger-table" id="archiveTable">
+              <thead><tr><th>তারিখ</th><th>ধরন</th><th>খাত/ব্যক্তি</th><th class="num">পরিমাণ</th><th>কারণ</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= সেটিংস ================= -->
+      <section class="page" id="settings">
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="user-cog"></i> প্রোফাইল</h3></div>
+          <div class="form-grid">
+            <div class="form-row">
+              <label for="settingName">আপনার নাম</label>
+              <input type="text" id="settingName" />
+            </div>
+          </div>
+        </div>
+
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="alarm-clock"></i> দৈনিক রিমাইন্ডার</h3></div>
+          <div class="form-grid">
+            <div class="form-row checkbox-row">
+              <label class="checkbox-label">
+                <input type="checkbox" id="reminderEnabled" />
+                <span>প্রতিদিন রিমাইন্ডার চালু রাখুন</span>
+              </label>
+            </div>
+            <div class="form-row">
+              <label for="reminderTime">রিমাইন্ডার সময়</label>
+              <input type="time" id="reminderTime" value="21:00" />
+            </div>
+          </div>
+          <p class="hint-text"><i data-lucide="info"></i> ব্রাউজার ট্যাব খোলা থাকলে নির্ধারিত সময়ে একটি পপআপ ও (অনুমতি দেওয়া থাকলে) সিস্টেম নোটিফিকেশন আসবে — যা মনে করিয়ে দেবে আজকের সব খরচ এন্ট্রি করা হয়েছে কিনা।</p>
+        </div>
+
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="database"></i> ডেটা ব্যাকআপ</h3></div>
+          <p class="hint-text">আপনার সব তথ্য (লেনদেন, কন্টাক্ট, ট্যুর, ক্যাটাগরি) একটি ফাইলে সংরক্ষণ (Export) করে রাখুন, পরে প্রয়োজনে তা আবার আমদানি (Import) করতে পারবেন — যেমন ব্রাউজার পরিবর্তন করলে বা মোবাইলে ব্যবহার করলে।</p>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="exportDataBtn"><i data-lucide="download"></i> ব্যাকআপ ডাউনলোড করুন</button>
+            <label class="btn btn-ghost" for="importDataInput"><i data-lucide="upload"></i> ব্যাকআপ আমদানি করুন</label>
+            <input type="file" id="importDataInput" accept=".json" class="file-input" />
+            <button class="btn btn-danger" id="resetAllBtn"><i data-lucide="trash-2"></i> সব ডেটা মুছে ফেলুন</button>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" id="saveSettingsBtn"><i data-lucide="check"></i> সেটিংস সংরক্ষণ করুন</button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ============ মোডাল: রিমাইন্ডার ============ -->
+<div class="modal-overlay" id="reminderModal">
+  <div class="modal-box">
+    <div class="modal-icon"><i data-lucide="bell-ring"></i></div>
+    <h3>দৈনিক রিমাইন্ডার</h3>
+    <p>আজকের সব খরচ ও লেনদেন কি এন্ট্রি করা হয়েছে? এখনই হিসাব গুলো লিখে রাখুন, যাতে পরে ভুলে না যান।</p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="reminderDoneBtn">হ্যাঁ, সম্পন্ন হয়েছে</button>
+      <button class="btn btn-ghost" id="reminderLaterBtn">পরে মনে করাবেন</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ মোডাল: নিশ্চিতকরণ ============ -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box">
+    <div class="modal-icon warn"><i data-lucide="alert-triangle"></i></div>
+    <h3 id="confirmTitle">নিশ্চিত করুন</h3>
+    <p id="confirmMessage">আপনি কি নিশ্চিতভাবে এই কাজটি করতে চান?</p>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="confirmYesBtn">হ্যাঁ, নিশ্চিত</button>
+      <button class="btn btn-ghost" id="confirmNoBtn">বাতিল</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ প্রিন্ট/পিডিএফ রিপোর্ট (ছাপার জন্য) ============ -->
+<div id="printable-report">
+  <div class="print-header">
+    <h1>ব্যক্তিগত হিসাব স্টেটমেন্ট</h1>
+    <p id="printName">মো. মিনহাজুর রহমান মাহিম</p>
+    <p id="printRange"></p>
+  </div>
+  <table class="print-table" id="printTable">
+    <thead><tr><th>তারিখ</th><th>সময়</th><th>ধরন</th><th>খাত / ব্যক্তি</th><th>নোট</th><th>পরিমাণ (৳)</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="print-summary" id="printSummary"></div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
