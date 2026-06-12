@@ -72,12 +72,12 @@ function saveState(){
    (Firebase Console > Project settings > General > Your apps > SDK setup and configuration)
    ===================================================================== */
 const firebaseConfig = {
-  apiKey: "AIzaSyAT6QydYvhgOa_yB92GcQva9dddB8amsYY",
-  authDomain: "mahims-ledger.firebaseapp.com",
-  projectId: "mahims-ledger",
-  storageBucket: "mahims-ledger.firebasestorage.app",
-  messagingSenderId: "13228923987",
-  appId: "1:13228923987:web:f430a25fda0e234cd63aa6"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 
 const firebaseReady = (typeof firebase !== 'undefined');
@@ -220,20 +220,26 @@ function setupAuthUI(){
 
       firestoreUnsub = db.collection('users').doc(user.uid).onSnapshot(docSnap => {
         isApplyingRemoteUpdate = true;
-        if(docSnap.exists && docSnap.data().state){
-          state = mergeWithDefaults(docSnap.data().state);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        } else {
-          // ক্লাউডে এখনো কোনো ডেটা নেই — বর্তমান (লোকাল) ডেটা ক্লাউডে পাঠানো হচ্ছে
-          db.collection('users').doc(user.uid).set({
-            state: state,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
+        try{
+          if(docSnap.exists && docSnap.data().state){
+            state = mergeWithDefaults(docSnap.data().state);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          } else {
+            // ক্লাউডে এখনো কোনো ডেটা নেই — বর্তমান (লোকাল) ডেটা ক্লাউডে পাঠানো হচ্ছে
+            db.collection('users').doc(user.uid).set({
+              state: state,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          }
+          renderAll();
+          loadSettingsForm();
+          setSyncStatus('synced');
+        }catch(e){
+          console.error("রেন্ডারে সমস্যা:", e);
+          setSyncStatus('error');
+        }finally{
+          isApplyingRemoteUpdate = false;
         }
-        renderAll();
-        loadSettingsForm();
-        isApplyingRemoteUpdate = false;
-        setSyncStatus('synced');
       }, err => {
         console.error("ফায়ারস্টোর সিঙ্ক সমস্যা:", err);
         setSyncStatus('error');
@@ -934,6 +940,10 @@ function renderCategories(){
   // চার্ট
   const ctx = document.getElementById('categoryChart');
   const chartData = sorted.filter(c => c.total > 0);
+  if(typeof Chart === 'undefined'){
+    refreshIcons();
+    return;
+  }
   if(categoryChartInstance) categoryChartInstance.destroy();
   if(chartData.length === 0){
     return;
@@ -1013,6 +1023,8 @@ function renderReportTable(){
 }
 
 function renderCharts(){
+  if(typeof Chart === 'undefined') return;
+
   const year = new Date().getFullYear();
   const monthly = new Array(12).fill(0);
   const yearly = {};
@@ -1475,22 +1487,27 @@ function renderAll(){
    ইনিশিয়ালাইজেশন
    ===================================================================== */
 function init(){
-  // ফর্মে আজকের তারিখ/সময় বসানো
-  entryDateInput.value = todayStr();
-  entryTimeInput.value = nowTimeStr();
-  updateEntryFormForType();
-
-  // টপবারে আজকের তারিখ
-  document.getElementById('pageDate').textContent = formatFullDateBn(new Date());
-
-  loadSettingsForm();
-  renderAll();
-  refreshIcons();
-
-  checkReminder();
-  setInterval(checkReminder, 60 * 1000);
-
+  // লগইন/সাইনআপ চালু করা (অন্য কোনো অংশে এরর হলেও এটি কাজ করবে)
   setupAuthUI();
+
+  try{
+    // ফর্মে আজকের তারিখ/সময় বসানো
+    entryDateInput.value = todayStr();
+    entryTimeInput.value = nowTimeStr();
+    updateEntryFormForType();
+
+    // টপবারে আজকের তারিখ
+    document.getElementById('pageDate').textContent = formatFullDateBn(new Date());
+
+    loadSettingsForm();
+    renderAll();
+    refreshIcons();
+
+    checkReminder();
+    setInterval(checkReminder, 60 * 1000);
+  }catch(e){
+    console.error("ইনিশিয়ালাইজেশনে সমস্যা:", e);
+  }
 }
 
 init();
