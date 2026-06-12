@@ -72,12 +72,12 @@ function saveState(){
    (Firebase Console > Project settings > General > Your apps > SDK setup and configuration)
    ===================================================================== */
 const firebaseConfig = {
-  apiKey: "AIzaSyAT6QydYvhgOa_yB92GcQva9dddB8amsYY",
-  authDomain: "mahims-ledger.firebaseapp.com",
-  projectId: "mahims-ledger",
-  storageBucket: "mahims-ledger.firebasestorage.app",
-  messagingSenderId: "13228923987",
-  appId: "1:13228923987:web:f430a25fda0e234cd63aa6"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 
 const firebaseReady = (typeof firebase !== 'undefined');
@@ -1234,21 +1234,50 @@ document.getElementById('csvFileInput').addEventListener('change', e => {
   const reader = new FileReader();
   reader.onload = ev => {
     try{
-      const rows = parseCSV(ev.target.result);
+      // ফাইলের শুরুতে থাকা BOM (Byte Order Mark) ক্যারেক্টার মুছে ফেলা হচ্ছে
+      const text = String(ev.target.result).replace(/^\uFEFF/, '');
+      const rows = parseCSV(text);
       if(rows.length < 2){ toast('ফাইলে কোনো তথ্য পাওয়া যায়নি।'); return; }
-      const header = rows[0];
-      const nameIdx = header.findIndex(h => h.trim().toLowerCase() === 'name');
-      const phoneIdx = header.findIndex(h => /phone\s*1\s*-\s*value/i.test(h) || /phone.*value/i.test(h));
 
-      if(nameIdx === -1 || phoneIdx === -1){
-        toast('CSV ফাইলে "Name" বা "Phone ... Value" কলাম পাওয়া যায়নি।');
+      const header = rows[0].map(h => h.replace(/^\uFEFF/, '').trim());
+
+      // নামের কলাম খোঁজা — "Name" অথবা "Given Name" + "Family Name"
+      const nameIdx   = header.findIndex(h => h.toLowerCase() === 'name');
+      const givenIdx  = header.findIndex(h => /given\s*name/i.test(h));
+      const familyIdx = header.findIndex(h => /family\s*name/i.test(h));
+
+      // ফোন নম্বরের কলাম খোঁজা — "Phone 1 - Value", "Phone 2 - Value" ইত্যাদি সব
+      const phoneIdxs = header
+        .map((h, i) => (/phone\s*\d*\s*-?\s*value/i.test(h) ? i : -1))
+        .filter(i => i !== -1);
+
+      if(nameIdx === -1 && givenIdx === -1 && familyIdx === -1){
+        toast('CSV ফাইলে নাম-সংক্রান্ত কোনো কলাম ("Name") পাওয়া যায়নি।');
         return;
       }
+      if(phoneIdxs.length === 0){
+        toast('CSV ফাইলে ফোন নম্বরের কোনো কলাম ("Phone ... Value") পাওয়া যায়নি।');
+        return;
+      }
+
       let added = 0;
       for(let i=1; i<rows.length; i++){
         const row = rows[i];
-        const name = (row[nameIdx] || '').trim();
-        const phone = (row[phoneIdx] || '').trim();
+
+        let name = nameIdx !== -1 ? (row[nameIdx] || '').trim() : '';
+        if(!name){
+          const given = givenIdx !== -1 ? (row[givenIdx] || '').trim() : '';
+          const family = familyIdx !== -1 ? (row[familyIdx] || '').trim() : '';
+          name = [given, family].filter(Boolean).join(' ').trim();
+        }
+
+        // একাধিক ফোন কলামের মধ্যে প্রথম যেটাতে মান আছে সেটি নেওয়া হবে
+        let phone = '';
+        for(const pi of phoneIdxs){
+          const val = (row[pi] || '').trim();
+          if(val){ phone = val; break; }
+        }
+
         if(!name || !phone) continue;
         const exists = state.contacts.some(c => c.name === name && c.phone === phone);
         if(!exists){
