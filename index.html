@@ -62,7 +62,7 @@
   <!-- ============ সাইডবার ============ -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-      <div class="seal">মি.মা.</div>
+      <div class="seal" id="sidebarSeal">মি.মা.</div>
       <div class="brand-text">
         <h1>মাহিম'স লেজার</h1>
         <p>ব্যক্তিগত হিসাব-খাতা</p>
@@ -510,6 +510,14 @@
 
         <div class="ledger-card form-card">
           <div class="card-head"><h3><i data-lucide="user-cog"></i> প্রোফাইল</h3></div>
+          <div class="profile-photo-row">
+            <div class="profile-photo-preview" id="profilePhotoPreview">মি.মা.</div>
+            <div class="profile-photo-actions">
+              <label class="btn btn-ghost" for="profilePhotoInput"><i data-lucide="image-plus"></i> ছবি বাছুন</label>
+              <input type="file" id="profilePhotoInput" accept="image/*" class="file-input" />
+              <button type="button" class="btn btn-danger" id="removeProfilePhotoBtn"><i data-lucide="trash-2"></i> ছবি সরান</button>
+            </div>
+          </div>
           <div class="form-grid">
             <div class="form-row">
               <label for="settingName">আপনার নাম</label>

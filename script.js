@@ -28,7 +28,8 @@ function defaultState(){
       reminderEnabled: true,
       reminderTime: "21:00",
       lastReminderDate: "",
-      monthlyBudget: 0
+      monthlyBudget: 0,
+      profilePhoto: null
     }
   };
 }
@@ -372,8 +373,8 @@ function toast(msg){
   let t = document.createElement('div');
   t.textContent = msg;
   t.style.position = 'fixed';
-  t.style.bottom = '20px';
-  t.style.right = '20px';
+  t.style.bottom = '90px';
+  t.style.left = '50%';
   t.style.background = 'var(--primary)';
   t.style.color = '#fff';
   t.style.padding = '.7rem 1.2rem';
@@ -383,12 +384,14 @@ function toast(msg){
   t.style.boxShadow = '0 6px 20px rgba(0,0,0,.18)';
   t.style.zIndex = 200;
   t.style.opacity = '0';
+  t.style.maxWidth = '90vw';
+  t.style.textAlign = 'center';
   t.style.transition = 'opacity .25s ease, transform .25s ease';
-  t.style.transform = 'translateY(8px)';
+  t.style.transform = 'translate(-50%, 8px)';
   document.body.appendChild(t);
-  requestAnimationFrame(()=>{ t.style.opacity='1'; t.style.transform='translateY(0)'; });
+  requestAnimationFrame(()=>{ t.style.opacity='1'; t.style.transform='translate(-50%, 0)'; });
   setTimeout(()=>{
-    t.style.opacity='0'; t.style.transform='translateY(8px)';
+    t.style.opacity='0'; t.style.transform='translate(-50%, 8px)';
     setTimeout(()=> t.remove(), 300);
   }, 2200);
 }
@@ -1613,7 +1616,74 @@ function loadSettingsForm(){
   document.getElementById('settingMonthlyBudget').value = state.settings.monthlyBudget || '';
   document.getElementById('reminderEnabled').checked = state.settings.reminderEnabled;
   document.getElementById('reminderTime').value = state.settings.reminderTime;
+  renderProfilePhoto();
 }
+
+function renderProfilePhoto(){
+  const photo = state.settings.profilePhoto;
+  const preview = document.getElementById('profilePhotoPreview');
+  const seal = document.getElementById('sidebarSeal');
+  if(photo){
+    preview.innerHTML = `<img src="${photo}" alt="প্রোফাইল ছবি" />`;
+    seal.innerHTML = `<img src="${photo}" alt="প্রোফাইল ছবি" />`;
+  } else {
+    preview.innerHTML = 'মি.মা.';
+    seal.innerHTML = 'মি.মা.';
+  }
+}
+
+/* ছবি রিসাইজ করে ছোট base64 ডেটাতে রূপান্তর — Firestore-এ সংরক্ষণের জন্য আকার কমিয়ে রাখা হয় */
+function resizeImageFile(file, maxSize, quality){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > height){
+          if(width > maxSize){ height = Math.round(height * (maxSize / width)); width = maxSize; }
+        } else {
+          if(height > maxSize){ width = Math.round(width * (maxSize / height)); height = maxSize; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = ev.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('profilePhotoInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const dataUrl = await resizeImageFile(file, 200, 0.8);
+    state.settings.profilePhoto = dataUrl;
+    saveState();
+    renderProfilePhoto();
+    toast('প্রোফাইল ছবি সংরক্ষিত হয়েছে।');
+  }catch(err){
+    console.error(err);
+    toast('ছবি প্রসেস করতে সমস্যা হয়েছে।');
+  }
+  e.target.value = '';
+});
+
+document.getElementById('removeProfilePhotoBtn').addEventListener('click', () => {
+  if(!state.settings.profilePhoto){ toast('কোনো ছবি যুক্ত নেই।'); return; }
+  openConfirm('ছবি সরান', 'আপনার প্রোফাইল ছবি সরিয়ে দিতে চান?', () => {
+    state.settings.profilePhoto = null;
+    saveState();
+    renderProfilePhoto();
+    toast('প্রোফাইল ছবি সরানো হয়েছে।');
+  });
+});
 
 document.getElementById('saveSettingsBtn').addEventListener('click', () => {
   state.settings.name = document.getElementById('settingName').value.trim() || state.settings.name;
