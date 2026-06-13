@@ -1823,8 +1823,21 @@ function init(){
   // লগইন/সাইনআপ চালু করা (অন্য কোনো অংশে এরর হলেও এটি কাজ করবে)
   setupAuthUI();
 
+  // হোম স্ক্রিন শর্টকাট (#add-entry, #dashboard ইত্যাদি) থেকে সরাসরি পেজ খোলা
+  const initialPage = (location.hash || '').replace('#', '') || 'dashboard';
+  const validPages = ['dashboard','add-entry','receivables','tours','categories','reports','contacts','archive','settings'];
+  const startPage = validPages.includes(initialPage) ? initialPage : 'dashboard';
+
   // প্রাথমিক হিস্ট্রি স্টেট — মোবাইলের ব্যাক বাটন সঠিকভাবে কাজ করার জন্য
-  history.replaceState({ page: 'dashboard' }, '', '#dashboard');
+  history.replaceState({ page: startPage }, '', '#' + startPage);
+  if(startPage !== 'dashboard'){
+    goToPage(startPage, { skipHistory: true });
+  }
+
+  // PWA সার্ভিস ওয়ার্কার রেজিস্টার (অফলাইনে অ্যাপ-শেল লোড হওয়ার জন্য)
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('./sw.js').catch(err => console.error('SW রেজিস্ট্রেশন সমস্যা:', err));
+  }
 
   try{
     // ফর্মে আজকের তারিখ/সময় বসানো
