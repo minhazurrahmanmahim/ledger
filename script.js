@@ -1241,10 +1241,11 @@ document.getElementById('csvFileInput').addEventListener('change', e => {
 
       const header = rows[0].map(h => h.replace(/^\uFEFF/, '').trim());
 
-      // নামের কলাম খোঁজা — "Name" অথবা "Given Name" + "Family Name"
+      // নামের কলাম খোঁজা — "Name", বা "Given/First Name" + "Middle Name" + "Family/Last Name"
       const nameIdx   = header.findIndex(h => h.toLowerCase() === 'name');
-      const givenIdx  = header.findIndex(h => /given\s*name/i.test(h));
-      const familyIdx = header.findIndex(h => /family\s*name/i.test(h));
+      const givenIdx  = header.findIndex(h => /^(given|first)\s*name$/i.test(h));
+      const middleIdx = header.findIndex(h => /^middle\s*name$/i.test(h));
+      const familyIdx = header.findIndex(h => /^(family|last)\s*name$/i.test(h));
 
       // ফোন নম্বরের কলাম খোঁজা — "Phone 1 - Value", "Phone 2 - Value" ইত্যাদি সব
       const phoneIdxs = header
@@ -1267,8 +1268,9 @@ document.getElementById('csvFileInput').addEventListener('change', e => {
         let name = nameIdx !== -1 ? (row[nameIdx] || '').trim() : '';
         if(!name){
           const given = givenIdx !== -1 ? (row[givenIdx] || '').trim() : '';
+          const middle = middleIdx !== -1 ? (row[middleIdx] || '').trim() : '';
           const family = familyIdx !== -1 ? (row[familyIdx] || '').trim() : '';
-          name = [given, family].filter(Boolean).join(' ').trim();
+          name = [given, middle, family].filter(Boolean).join(' ').trim();
         }
 
         // একাধিক ফোন কলামের মধ্যে প্রথম যেটাতে মান আছে সেটি নেওয়া হবে
