@@ -100,7 +100,7 @@
     </nav>
 
     <div class="sidebar-footer">
-      <p>সব তথ্য আপনার ব্রাউজারেই (LocalStorage) সংরক্ষিত থাকে। কোনো সার্ভারে পাঠানো হয় না।</p>
+      <p>আপনার সব তথ্য ক্লাউডে সুরক্ষিতভাবে সংরক্ষিত হয় — যেকোনো ডিভাইস থেকে লগইন করলে সর্বশেষ তথ্য দেখতে পাবেন।</p>
     </div>
   </aside>
 
@@ -119,7 +119,7 @@
         <h2 id="pageTitle">ড্যাশবোর্ড</h2>
         <p id="pageDate"></p>
       </div>
-      <div class="sync-status" id="syncStatus" title="ক্লাউড সিঙ্ক স্ট্যাটাস">
+      <div class="sync-status" id="syncStatus" title="রিফ্রেশ করতে ট্যাপ করুন">
         <i data-lucide="cloud" id="syncIcon"></i>
         <span id="syncText">সিঙ্ক হচ্ছে...</span>
       </div>
@@ -140,33 +140,37 @@
         </div>
 
         <div class="stat-grid">
-          <div class="stat-card">
+          <div class="stat-card clickable" data-page="add-entry" title="বিস্তারিত খরচের তালিকা দেখুন">
             <div class="stat-icon"><i data-lucide="wallet"></i></div>
             <div>
               <p class="stat-label">আজকের মোট খরচ</p>
               <p class="stat-value" id="statTodayExpense">৳ ০</p>
             </div>
+            <i data-lucide="chevron-right" class="stat-arrow"></i>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable" data-page="receivables" title="পাই/পাওনার বিস্তারিত দেখুন">
             <div class="stat-icon income"><i data-lucide="arrow-down-to-line"></i></div>
             <div>
               <p class="stat-label">মোট পাই (অন্যের কাছে)</p>
               <p class="stat-value income" id="statTotalReceivable">৳ ০</p>
             </div>
+            <i data-lucide="chevron-right" class="stat-arrow"></i>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable" data-page="receivables" title="পাই/পাওনার বিস্তারিত দেখুন">
             <div class="stat-icon expense"><i data-lucide="arrow-up-from-line"></i></div>
             <div>
               <p class="stat-label">মোট পাওনা (আমার কাছে)</p>
               <p class="stat-value expense" id="statTotalPayable">৳ ০</p>
             </div>
+            <i data-lucide="chevron-right" class="stat-arrow"></i>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable" data-page="reports" title="মাসের বিস্তারিত রিপোর্ট দেখুন">
             <div class="stat-icon"><i data-lucide="calendar-days"></i></div>
             <div>
               <p class="stat-label">এই মাসের মোট খরচ</p>
               <p class="stat-value" id="statMonthExpense">৳ ০</p>
             </div>
+            <i data-lucide="chevron-right" class="stat-arrow"></i>
           </div>
         </div>
 
@@ -233,8 +237,12 @@
               </div>
               <div class="form-row" id="personRow" style="display:none;">
                 <label for="entryPerson">ব্যক্তি</label>
-                <input type="text" id="entryPerson" list="contactList" placeholder="নাম লিখুন বা কন্টাক্ট থেকে বাছুন" />
-                <datalist id="contactList"></datalist>
+                <div class="input-with-btn">
+                  <input type="text" id="entryPerson" placeholder="নাম লিখুন" />
+                  <button type="button" class="icon-btn-outline" id="pickContactBtn" title="কন্টাক্ট থেকে বাছুন">
+                    <i data-lucide="book-user"></i>
+                  </button>
+                </div>
               </div>
               <div class="form-row">
                 <label for="entryAmount">পরিমাণ (৳)</label>
@@ -524,7 +532,7 @@
 
         <div class="ledger-card form-card">
           <div class="card-head"><h3><i data-lucide="database"></i> ডেটা ব্যাকআপ</h3></div>
-          <p class="hint-text">আপনার সব তথ্য (লেনদেন, কন্টাক্ট, ট্যুর, ক্যাটাগরি) একটি ফাইলে সংরক্ষণ (Export) করে রাখুন, পরে প্রয়োজনে তা আবার আমদানি (Import) করতে পারবেন — যেমন ব্রাউজার পরিবর্তন করলে বা মোবাইলে ব্যবহার করলে।</p>
+          <p class="hint-text">আপনার সব তথ্য ক্লাউডে স্বয়ংক্রিয়ভাবে সংরক্ষিত হয়, তাই আলাদা ব্যাকআপের প্রয়োজন নেই। তবে চাইলে অতিরিক্ত সতর্কতা হিসেবে একটি কপি ডাউনলোড করে রাখতে পারেন, বা প্রয়োজনে কোনো ফাইল থেকে ডেটা পুনরায় আমদানি করতে পারেন।</p>
           <div class="form-actions">
             <button class="btn btn-primary" id="exportDataBtn"><i data-lucide="download"></i> ব্যাকআপ ডাউনলোড করুন</button>
             <label class="btn btn-ghost" for="importDataInput"><i data-lucide="upload"></i> ব্যাকআপ আমদানি করুন</label>
@@ -541,6 +549,11 @@
     </div>
   </main>
 </div>
+
+<!-- ============ ফ্লোটিং কুইক-অ্যাড বাটন ============ -->
+<button id="fabAddBtn" class="fab-add" title="নতুন এন্ট্রি যুক্ত করুন">
+  <i data-lucide="plus"></i>
+</button>
 
 <!-- ============ মোডাল: রিমাইন্ডার ============ -->
 <div class="modal-overlay" id="reminderModal">
@@ -564,6 +577,19 @@
     <div class="modal-actions">
       <button class="btn btn-danger" id="confirmYesBtn">হ্যাঁ, নিশ্চিত</button>
       <button class="btn btn-ghost" id="confirmNoBtn">বাতিল</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ মোডাল: কন্টাক্ট বাছাই ============ -->
+<div class="modal-overlay" id="contactPickerModal">
+  <div class="modal-box contact-picker-box">
+    <div class="modal-icon"><i data-lucide="book-user"></i></div>
+    <h3>কন্টাক্ট থেকে বাছুন</h3>
+    <input type="text" id="contactPickerSearch" placeholder="নাম দিয়ে খুঁজুন..." class="contact-picker-search" />
+    <div id="contactPickerList" class="contact-picker-list"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="contactPickerCloseBtn">বাতিল</button>
     </div>
   </div>
 </div>

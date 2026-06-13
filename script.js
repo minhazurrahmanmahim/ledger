@@ -1,6 +1,6 @@
 /* =====================================================================
    মাহিম'স লেজার — অ্যাপ লজিক
-   সব ডেটা ব্রাউজারের LocalStorage-এ সংরক্ষিত হয়। কোনো সার্ভার নেই।
+   সব ডেটা ক্লাউডে (Firebase Firestore) সংরক্ষিত হয় এবং লোকাল কপি ক্যাশ হিসেবে রাখা হয়।
    ===================================================================== */
 
 const STORAGE_KEY = "mahim_ledger_state_v1";
@@ -127,6 +127,36 @@ function syncToCloud(){
       .catch(err => { console.error("ক্লাউড সিঙ্ক সমস্যা:", err); setSyncStatus('error'); });
   }, 800);
 }
+
+// সিঙ্ক স্ট্যাটাসে ট্যাপ/ক্লিক করলে সার্ভার থেকে সর্বশেষ ডেটা জোর করে পুনরায় আনা হয়
+// (এনিমেশন দেখিয়ে বোঝানো হয় রিফ্রেশ হচ্ছে)
+function manualRefresh(){
+  if(!firebaseReady || !currentUser){
+    setSyncStatus('syncing');
+    setTimeout(() => { renderAll(); setSyncStatus('error'); }, 500);
+    return;
+  }
+  setSyncStatus('syncing');
+  isApplyingRemoteUpdate = true;
+  db.collection('users').doc(currentUser.uid).get({ source: 'server' })
+    .then(docSnap => {
+      if(docSnap.exists && docSnap.data().state){
+        state = mergeWithDefaults(docSnap.data().state);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      }
+      renderAll();
+      loadSettingsForm();
+      setSyncStatus('synced');
+      toast('সর্বশেষ তথ্য রিফ্রেশ হয়েছে।');
+    })
+    .catch(err => {
+      console.error("রিফ্রেশ সমস্যা:", err);
+      setSyncStatus('error');
+    })
+    .finally(() => { isApplyingRemoteUpdate = false; });
+}
+
+document.getElementById('syncStatus').addEventListener('click', manualRefresh);
 
 function translateAuthError(err){
   const map = {
@@ -390,17 +420,38 @@ const PAGE_TITLES = {
   settings: 'সেটিংস'
 };
 
-function goToPage(pageId){
+function goToPage(pageId, opts){
+  opts = opts || {};
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === pageId));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === pageId));
   document.getElementById('pageTitle').textContent = PAGE_TITLES[pageId] || '';
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('open');
   window.scrollTo({top:0, behavior:'smooth'});
+
+  // অ্যাড-এন্ট্রি পেজে থাকলে ফ্লোটিং বাটন দেখানোর প্রয়োজন নেই
+  document.getElementById('fabAddBtn').classList.toggle('hide', pageId === 'add-entry');
+
+  // ব্রাউজার হিস্ট্রিতে যুক্ত করা — যাতে মোবাইলের ব্যাক বাটনে অ্যাপের আগের পেজে যাওয়া যায়,
+  // ওয়েবসাইট থেকে বের হয়ে না যায়
+  if(!opts.skipHistory){
+    history.pushState({ page: pageId }, '', '#' + pageId);
+  }
 }
+
+window.addEventListener('popstate', e => {
+  const pageId = (e.state && e.state.page) || 'dashboard';
+  goToPage(pageId, { skipHistory: true });
+});
 
 document.querySelectorAll('.nav-item, .link-btn[data-page]').forEach(btn => {
   btn.addEventListener('click', () => goToPage(btn.dataset.page));
+});
+
+document.getElementById('fabAddBtn').addEventListener('click', () => goToPage('add-entry'));
+
+document.querySelectorAll('.stat-card.clickable[data-page]').forEach(card => {
+  card.addEventListener('click', () => goToPage(card.dataset.page));
 });
 
 document.getElementById('hamburgerBtn').addEventListener('click', () => {
@@ -476,10 +527,47 @@ function populateTourSelect(){
     entryTourSel.innerHTML = state.tours.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
   }
 }
-function populateContactDatalist(){
-  document.getElementById('contactList').innerHTML =
-    state.contacts.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.phone)}</option>`).join('');
+/* ===================== কন্টাক্ট পিকার মোডাল ===================== */
+function renderContactPickerList(filter){
+  const list = document.getElementById('contactPickerList');
+  const q = (filter || '').trim().toLowerCase();
+  const contacts = state.contacts.filter(c =>
+    !q || c.name.toLowerCase().includes(q) || (c.phone || '').toLowerCase().includes(q)
+  );
+  if(contacts.length === 0){
+    list.innerHTML = `<div class="empty-state">কোনো কন্টাক্ট পাওয়া যায়নি।</div>`;
+    return;
+  }
+  list.innerHTML = contacts.map(c => `
+    <div class="contact-picker-item" data-name="${escapeHtml(c.name)}">
+      <span class="name">${escapeHtml(c.name)}</span>
+      <span class="phone">${escapeHtml(c.phone || '')}</span>
+    </div>
+  `).join('');
 }
+
+document.getElementById('pickContactBtn').addEventListener('click', () => {
+  document.getElementById('contactPickerSearch').value = '';
+  renderContactPickerList('');
+  document.getElementById('contactPickerModal').classList.add('open');
+  refreshIcons();
+});
+
+document.getElementById('contactPickerCloseBtn').addEventListener('click', () => {
+  document.getElementById('contactPickerModal').classList.remove('open');
+});
+
+document.getElementById('contactPickerSearch').addEventListener('input', e => {
+  renderContactPickerList(e.target.value);
+});
+
+document.getElementById('contactPickerList').addEventListener('click', e => {
+  const item = e.target.closest('.contact-picker-item');
+  if(!item) return;
+  entryPersonInput.value = item.dataset.name;
+  document.getElementById('contactPickerModal').classList.remove('open');
+});
+
 
 function escapeHtml(str){
   const div = document.createElement('div');
@@ -756,24 +844,91 @@ function renderDueList(containerId, list, amountClass){
     wrap.innerHTML = `<div class="empty-state">কোনো হিসাব নেই।</div>`;
     return;
   }
-  wrap.innerHTML = [...list].sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt)).map(e => `
-    <div class="entry-row">
-      <div class="entry-main">
-        <span class="entry-title">${escapeHtml(e.person || 'অজানা')}</span>
-        <span class="entry-sub">${formatDateDMY(e.date)} · ${formatTimeBn(e.time)}${e.note ? ' · ' + escapeHtml(e.note) : ''}</span>
+
+  // ব্যক্তি অনুযায়ী গ্রুপ করা — একজনের সব এন্ট্রি একসাথে যোগ হয়ে দেখাবে
+  const groups = {};
+  list.forEach(e => {
+    const key = (e.person || '').trim() || 'অজানা';
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(e);
+  });
+
+  const groupKeys = Object.keys(groups).sort((a,b) => {
+    const totalA = groups[a].reduce((s,e)=>s+e.amount,0);
+    const totalB = groups[b].reduce((s,e)=>s+e.amount,0);
+    return totalB - totalA;
+  });
+
+  wrap.innerHTML = groupKeys.map(key => {
+    const entries = [...groups[key]].sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt));
+    const total = entries.reduce((s,e)=>s+e.amount,0);
+    const groupId = 'grp-' + uid();
+
+    if(entries.length === 1){
+      const e = entries[0];
+      return `
+        <div class="due-group">
+          <div class="due-group-header" style="cursor:default;">
+            <div class="due-group-main">
+              <span class="entry-title">${escapeHtml(key)}</span>
+              <span class="entry-sub">${formatDateDMY(e.date)} · ${formatTimeBn(e.time)}${e.note ? ' · ' + escapeHtml(e.note) : ''}</span>
+            </div>
+            <span class="entry-amount ${amountClass}">${taka(total)}</span>
+          </div>
+          <div class="due-group-detail open" style="border-top:none; padding-top:0;">
+            <div class="entry-row">
+              <div class="entry-main"><span class="entry-sub">এই এন্ট্রির বিস্তারিত</span></div>
+              <div class="entry-actions">
+                <button class="icon-btn" data-action="settle" data-id="${e.id}" title="পরিশোধ হয়েছে"><i data-lucide="check-circle-2"></i></button>
+                <button class="icon-btn" data-action="edit" data-id="${e.id}" title="সম্পাদনা"><i data-lucide="pencil"></i></button>
+                <button class="icon-btn danger" data-action="delete" data-id="${e.id}" title="ডিলিট"><i data-lucide="trash-2"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="due-group">
+        <button class="due-group-header" data-target="${groupId}">
+          <div class="due-group-main">
+            <span class="entry-title">${escapeHtml(key)}</span>
+            <span class="entry-sub">${bnDigits(entries.length)} টি এন্ট্রি — বিস্তারিত দেখতে ট্যাপ করুন</span>
+          </div>
+          <span class="entry-amount ${amountClass}">${taka(total)}</span>
+          <i data-lucide="chevron-down" class="due-group-chevron"></i>
+        </button>
+        <div class="due-group-detail" id="${groupId}">
+          ${entries.map(e => `
+            <div class="entry-row">
+              <div class="entry-main">
+                <span class="entry-sub">${formatDateDMY(e.date)} · ${formatTimeBn(e.time)}${e.note ? ' · ' + escapeHtml(e.note) : ''}</span>
+              </div>
+              <span class="entry-amount ${amountClass}">${taka(e.amount)}</span>
+              <div class="entry-actions">
+                <button class="icon-btn" data-action="settle" data-id="${e.id}" title="পরিশোধ হয়েছে"><i data-lucide="check-circle-2"></i></button>
+                <button class="icon-btn" data-action="edit" data-id="${e.id}" title="সম্পাদনা"><i data-lucide="pencil"></i></button>
+                <button class="icon-btn danger" data-action="delete" data-id="${e.id}" title="ডিলিট"><i data-lucide="trash-2"></i></button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
       </div>
-      <span class="entry-amount ${amountClass}">${taka(e.amount)}</span>
-      <div class="entry-actions">
-        <button class="icon-btn" data-action="settle" data-id="${e.id}" title="পরিশোধ হয়েছে"><i data-lucide="check-circle-2"></i></button>
-        <button class="icon-btn" data-action="edit" data-id="${e.id}" title="সম্পাদনা"><i data-lucide="pencil"></i></button>
-        <button class="icon-btn danger" data-action="delete" data-id="${e.id}" title="ডিলিট"><i data-lucide="trash-2"></i></button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
+  refreshIcons();
 }
 
 ['receivableList','payableList'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
+    const toggleBtn = e.target.closest('[data-target]');
+    if(toggleBtn){
+      const detail = document.getElementById(toggleBtn.dataset.target);
+      detail.classList.toggle('open');
+      toggleBtn.classList.toggle('open');
+      return;
+    }
     const btn = e.target.closest('[data-action]');
     if(!btn) return;
     const entryId = btn.dataset.id;
@@ -1183,7 +1338,6 @@ document.getElementById('contactForm').addEventListener('submit', e => {
 document.getElementById('contactSearch').addEventListener('input', renderContacts);
 
 function renderContacts(){
-  populateContactDatalist();
   const search = document.getElementById('contactSearch').value.trim().toLowerCase();
   let list = [...state.contacts];
   if(search){
@@ -1510,7 +1664,6 @@ function renderAll(){
   renderCharts();
   renderContacts();
   renderArchive();
-  populateContactDatalist();
   refreshIcons();
 }
 
@@ -1520,6 +1673,9 @@ function renderAll(){
 function init(){
   // লগইন/সাইনআপ চালু করা (অন্য কোনো অংশে এরর হলেও এটি কাজ করবে)
   setupAuthUI();
+
+  // প্রাথমিক হিস্ট্রি স্টেট — মোবাইলের ব্যাক বাটন সঠিকভাবে কাজ করার জন্য
+  history.replaceState({ page: 'dashboard' }, '', '#dashboard');
 
   try{
     // ফর্মে আজকের তারিখ/সময় বসানো
