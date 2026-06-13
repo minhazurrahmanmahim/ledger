@@ -1237,7 +1237,7 @@ function renderReportTable(){
   let rows = [...state.entries];
   if(from) rows = rows.filter(e => e.date >= from);
   if(to) rows = rows.filter(e => e.date <= to);
-  if(cat !== 'all') rows = rows.filter(e => e.kind !== 'expense' || e.category === cat);
+  if(cat !== 'all') rows = rows.filter(e => e.kind === 'expense' && e.category === cat);
 
   rows.sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time));
   currentFilteredEntries = rows;
