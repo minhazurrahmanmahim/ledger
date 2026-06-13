@@ -236,12 +236,17 @@
                 <select id="entryCategory"></select>
               </div>
               <div class="form-row" id="personRow" style="display:none;">
-                <label for="entryPerson">ব্যক্তি</label>
+                <label for="entryPerson">ব্যক্তি (নাম লিখুন)</label>
                 <div class="input-with-btn">
                   <input type="text" id="entryPerson" placeholder="নাম লিখুন" />
-                  <button type="button" class="icon-btn-outline" id="pickContactBtn" title="কন্টাক্ট থেকে বাছুন">
+                  <button type="button" class="icon-btn-outline" id="pickContactBtn" title="কন্টাক্ট লিংক করুন">
                     <i data-lucide="book-user"></i>
                   </button>
+                </div>
+                <div id="linkedContactChip" class="linked-contact-chip" style="display:none;">
+                  <i data-lucide="link"></i>
+                  <span id="linkedContactText"></span>
+                  <button type="button" id="removeLinkedContactBtn" title="লিংক বাতিল করুন"><i data-lucide="x"></i></button>
                 </div>
               </div>
               <div class="form-row">
@@ -255,6 +260,10 @@
               <div class="form-row">
                 <label for="entryTime">সময়</label>
                 <input type="time" id="entryTime" required />
+                <label class="checkbox-label time-unknown-label">
+                  <input type="checkbox" id="entryTimeUnknown" />
+                  <span>সময় জানা নেই / মনে নেই</span>
+                </label>
               </div>
               <div class="form-row checkbox-row">
                 <label class="checkbox-label">

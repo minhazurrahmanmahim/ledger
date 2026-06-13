@@ -332,11 +332,20 @@ function formatDateDMY(dateStr){
   return bnDigits(`${d}/${m}/${y}`);
 }
 function formatTimeBn(timeStr){
-  if(!timeStr) return '';
+  if(!timeStr) return '—';
   let [h,m] = timeStr.split(':').map(Number);
   const period = h >= 12 ? 'অপরাহ্ন' : 'পূর্বাহ্ন';
   let h12 = h % 12; if(h12 === 0) h12 = 12;
   return bnDigits(`${pad(h12)}:${pad(m)}`) + ' ' + period;
+}
+
+// এন্ট্রি লিস্টে দেখানোর জন্য তারিখ/সময়/নোট একসাথে — সময় না থাকলে এড়িয়ে যাওয়া হয়
+function entryMetaLine(e){
+  const parts = [formatDateDMY(e.date)];
+  if(e.time) parts.push(formatTimeBn(e.time));
+  else parts.push('সময় উল্লেখ নেই');
+  if(e.note) parts.push(escapeHtml(e.note));
+  return parts.join(' · ');
 }
 function formatFullDateBn(date){
   return `${bnDigits(date.getDate())} ${MONTHS_BN[date.getMonth()]}, ${bnDigits(date.getFullYear())} — ${WEEKDAYS_BN[date.getDay()]}`;
@@ -468,6 +477,21 @@ document.getElementById('bellBtn').addEventListener('click', () => goToPage('set
    এন্ট্রি ফর্ম (খরচ / পাই / পাওনা)
    ===================================================================== */
 let currentEntryType = 'expense';
+let selectedContact = null; // {name, phone} — পাই/পাওনা এন্ট্রির সাথে লিংক করা কন্টাক্ট
+
+function setLinkedContact(contact){
+  selectedContact = contact;
+  const chip = document.getElementById('linkedContactChip');
+  const text = document.getElementById('linkedContactText');
+  text.textContent = contact.phone ? `${contact.name} (${contact.phone})` : contact.name;
+  chip.style.display = 'flex';
+  refreshIcons();
+}
+
+function clearLinkedContact(){
+  selectedContact = null;
+  document.getElementById('linkedContactChip').style.display = 'none';
+}
 
 const entryForm        = document.getElementById('entryForm');
 const entryIdInput     = document.getElementById('entryId');
@@ -476,6 +500,7 @@ const entryPersonInput = document.getElementById('entryPerson');
 const entryAmountInput = document.getElementById('entryAmount');
 const entryDateInput   = document.getElementById('entryDate');
 const entryTimeInput   = document.getElementById('entryTime');
+const entryTimeUnknown = document.getElementById('entryTimeUnknown');
 const entryNoteInput   = document.getElementById('entryNote');
 const entryIsTour      = document.getElementById('entryIsTour');
 const tourFields       = document.getElementById('tourFields');
@@ -517,6 +542,18 @@ entryIsTour.addEventListener('change', () => {
   tourFields.style.display = entryIsTour.checked ? '' : 'none';
 });
 
+entryTimeUnknown.addEventListener('change', () => {
+  if(entryTimeUnknown.checked){
+    entryTimeInput.value = '';
+    entryTimeInput.disabled = true;
+    entryTimeInput.required = false;
+  } else {
+    entryTimeInput.disabled = false;
+    entryTimeInput.required = true;
+    entryTimeInput.value = nowTimeStr();
+  }
+});
+
 function populateCategorySelect(){
   entryCategorySel.innerHTML = state.categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
 }
@@ -539,7 +576,7 @@ function renderContactPickerList(filter){
     return;
   }
   list.innerHTML = contacts.map(c => `
-    <div class="contact-picker-item" data-name="${escapeHtml(c.name)}">
+    <div class="contact-picker-item" data-name="${escapeHtml(c.name)}" data-phone="${escapeHtml(c.phone || '')}">
       <span class="name">${escapeHtml(c.name)}</span>
       <span class="phone">${escapeHtml(c.phone || '')}</span>
     </div>
@@ -564,9 +601,16 @@ document.getElementById('contactPickerSearch').addEventListener('input', e => {
 document.getElementById('contactPickerList').addEventListener('click', e => {
   const item = e.target.closest('.contact-picker-item');
   if(!item) return;
-  entryPersonInput.value = item.dataset.name;
+  setLinkedContact({ name: item.dataset.name, phone: item.dataset.phone || '' });
+  // ব্যক্তির নাম ফিল্ড খালি থাকলে সুবিধার জন্য কন্টাক্টের নাম দিয়ে শুরু করে দেওয়া হলো,
+  // তবে ব্যবহারকারী চাইলে এটি পরিবর্তন করতে পারবেন
+  if(!entryPersonInput.value.trim()){
+    entryPersonInput.value = item.dataset.name;
+  }
   document.getElementById('contactPickerModal').classList.remove('open');
 });
+
+document.getElementById('removeLinkedContactBtn').addEventListener('click', clearLinkedContact);
 
 
 function escapeHtml(str){
@@ -580,9 +624,13 @@ function resetEntryForm(){
   entryIdInput.value = '';
   entryDateInput.value = todayStr();
   entryTimeInput.value = nowTimeStr();
+  entryTimeInput.disabled = false;
+  entryTimeInput.required = true;
+  entryTimeUnknown.checked = false;
   currentEntryType = 'expense';
   document.querySelectorAll('#entryTypeControl .seg').forEach(s => s.classList.toggle('active', s.dataset.value === 'expense'));
   updateEntryFormForType();
+  clearLinkedContact();
   entryFormTitle.innerHTML = `<i data-lucide="pencil-line"></i> নতুন এন্ট্রি যোগ করুন`;
   refreshIcons();
 }
@@ -601,10 +649,12 @@ entryForm.addEventListener('submit', e => {
     kind: currentEntryType,
     amount,
     date: entryDateInput.value,
-    time: entryTimeInput.value,
+    time: entryTimeUnknown.checked ? '' : entryTimeInput.value,
     note: entryNoteInput.value.trim(),
     category: currentEntryType === 'expense' ? entryCategorySel.value : null,
     person: currentEntryType !== 'expense' ? entryPersonInput.value.trim() : null,
+    contactName: currentEntryType !== 'expense' ? (selectedContact ? selectedContact.name : null) : null,
+    contactPhone: currentEntryType !== 'expense' ? (selectedContact ? selectedContact.phone : null) : null,
     isTour: currentEntryType === 'expense' && entryIsTour.checked,
     tourId: (currentEntryType === 'expense' && entryIsTour.checked) ? entryTourSel.value : null,
     tourCategory: (currentEntryType === 'expense' && entryIsTour.checked) ? entryTourCatSel.value : null,
@@ -648,8 +698,23 @@ function editEntry(id){
   }
   entryAmountInput.value = entry.amount;
   entryDateInput.value = entry.date;
-  entryTimeInput.value = entry.time;
+  if(entry.time){
+    entryTimeUnknown.checked = false;
+    entryTimeInput.disabled = false;
+    entryTimeInput.required = true;
+    entryTimeInput.value = entry.time;
+  } else {
+    entryTimeUnknown.checked = true;
+    entryTimeInput.disabled = true;
+    entryTimeInput.required = false;
+    entryTimeInput.value = '';
+  }
   entryNoteInput.value = entry.note || '';
+  if(entry.contactName){
+    setLinkedContact({ name: entry.contactName, phone: entry.contactPhone || '' });
+  } else {
+    clearLinkedContact();
+  }
   entryIsTour.checked = !!entry.isTour;
   tourFields.style.display = entry.isTour ? '' : 'none';
   if(entry.isTour){
@@ -770,7 +835,7 @@ function renderDashboard(){
       <div class="entry-row">
         <div class="entry-main">
           <span class="entry-title">${escapeHtml(entryTitle(e))}</span>
-          <span class="entry-sub">${formatDateDMY(e.date)} · ${formatTimeBn(e.time)}${e.note ? ' · ' + escapeHtml(e.note) : ''}</span>
+          <span class="entry-sub">${entryMetaLine(e)}</span>
         </div>
         <span class="entry-amount ${entryAmountClass(e)}">${taka(e.amount)}</span>
       </div>
@@ -838,6 +903,15 @@ function renderReceivables(){
   renderDueList('payableList', payables, 'expense');
 }
 
+// লিংকড কন্টাক্টের তথ্য (নাম ও ফোন নম্বর) দেখানোর জন্য
+function contactInfoLine(e){
+  if(!e.contactName && !e.contactPhone) return '';
+  const parts = [];
+  if(e.contactName) parts.push(escapeHtml(e.contactName));
+  if(e.contactPhone) parts.push(escapeHtml(e.contactPhone));
+  return `<span class="entry-sub contact-link-line"><i data-lucide="link"></i> কন্টাক্ট: ${parts.join(' · ')}</span>`;
+}
+
 function renderDueList(containerId, list, amountClass){
   const wrap = document.getElementById(containerId);
   if(list.length === 0){
@@ -871,7 +945,8 @@ function renderDueList(containerId, list, amountClass){
           <div class="due-group-header" style="cursor:default;">
             <div class="due-group-main">
               <span class="entry-title">${escapeHtml(key)}</span>
-              <span class="entry-sub">${formatDateDMY(e.date)} · ${formatTimeBn(e.time)}${e.note ? ' · ' + escapeHtml(e.note) : ''}</span>
+              <span class="entry-sub">${entryMetaLine(e)}</span>
+              ${contactInfoLine(e)}
             </div>
             <span class="entry-amount ${amountClass}">${taka(total)}</span>
           </div>
@@ -889,12 +964,15 @@ function renderDueList(containerId, list, amountClass){
       `;
     }
 
+    const linkedEntry = entries.find(e => e.contactName || e.contactPhone);
+
     return `
       <div class="due-group">
         <button class="due-group-header" data-target="${groupId}">
           <div class="due-group-main">
             <span class="entry-title">${escapeHtml(key)}</span>
             <span class="entry-sub">${bnDigits(entries.length)} টি এন্ট্রি — বিস্তারিত দেখতে ট্যাপ করুন</span>
+            ${linkedEntry ? contactInfoLine(linkedEntry) : ''}
           </div>
           <span class="entry-amount ${amountClass}">${taka(total)}</span>
           <i data-lucide="chevron-down" class="due-group-chevron"></i>
@@ -903,7 +981,8 @@ function renderDueList(containerId, list, amountClass){
           ${entries.map(e => `
             <div class="entry-row">
               <div class="entry-main">
-                <span class="entry-sub">${formatDateDMY(e.date)} · ${formatTimeBn(e.time)}${e.note ? ' · ' + escapeHtml(e.note) : ''}</span>
+                <span class="entry-sub">${entryMetaLine(e)}</span>
+                ${contactInfoLine(e)}
               </div>
               <span class="entry-amount ${amountClass}">${taka(e.amount)}</span>
               <div class="entry-actions">
@@ -978,7 +1057,7 @@ function renderTours(){
         <div class="entry-row">
           <div class="entry-main">
             <span class="entry-title">${escapeHtml(it.tourCategory || 'অন্যান্য')} — ${escapeHtml(it.note || '')}</span>
-            <span class="entry-sub">${formatDateDMY(it.date)} · ${formatTimeBn(it.time)}</span>
+            <span class="entry-sub">${entryMetaLine(it)}</span>
           </div>
           <span class="entry-amount expense">${taka(it.amount)}</span>
           <div class="entry-actions">

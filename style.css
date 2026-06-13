@@ -563,3 +563,25 @@ textarea{ resize: vertical; }
   .fab-add{ right:1rem; bottom:1.1rem; width:52px; height:52px; }
   .fab-add i{ width:24px; height:24px; }
 }
+
+.time-unknown-label{ margin-top:.4rem; font-size:.8rem; }
+
+/* ===================== লিংকড কন্টাক্ট চিপ ===================== */
+.linked-contact-chip{
+  display:flex; align-items:center; gap:.45rem; margin-top:.5rem;
+  padding:.4rem .7rem; border-radius:999px; font-size:.8rem;
+  background: var(--accent-soft); color: var(--primary-soft); border:1px solid rgba(176,141,79,.3);
+  width: fit-content;
+}
+.linked-contact-chip i{ width:14px; height:14px; }
+.linked-contact-chip #removeLinkedContactBtn{
+  border:none; background:none; cursor:pointer; color: var(--muted);
+  display:flex; align-items:center; margin-left:.2rem;
+}
+.linked-contact-chip #removeLinkedContactBtn:hover{ color: var(--expense); }
+
+.contact-link-line{
+  display:flex; align-items:center; gap:.3rem; color: var(--accent) !important;
+  font-size:.74rem; margin-top:.1rem;
+}
+.contact-link-line i{ width:12px; height:12px; flex-shrink:0; }
