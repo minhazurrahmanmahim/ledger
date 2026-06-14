@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mahims-ledger-v1';
+const CACHE_NAME = 'mahims-ledger-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -25,20 +25,18 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// অ্যাপ-শেল ক্যাশ থেকে দেওয়া হয় (অফলাইনেও খোলা যাবে);
-// বাহ্যিক CDN/Firebase রিকোয়েস্ট সরাসরি নেটওয়ার্কে যায় (ক্লাউড সিঙ্কের জন্য জরুরি)
+// অ্যাপ-শেল ফাইল (HTML/CSS/JS) — নেটওয়ার্ক-ফার্স্ট: ইন্টারনেট থাকলে সবসময় সর্বশেষ
+// ভার্সন আনা হবে এবং ক্যাশ আপডেট হবে; অফলাইনে থাকলে ক্যাশ করা ভার্সন দেখাবে।
+// বাহ্যিক CDN/Firebase রিকোয়েস্ট সরাসরি নেটওয়ার্কে যায় (ক্লাউড সিঙ্কের জন্য জরুরি)।
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  if(url.origin !== self.location.origin) return; // CDN/Firebase রিকোয়েস্ট স্পর্শ করা হবে না
+  if(url.origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      if(cached) return cached;
-      return fetch(event.request).then(response => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return response;
-      }).catch(() => cached);
-    })
+    fetch(event.request).then(response => {
+      const clone = response.clone();
+      caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+      return response;
+    }).catch(() => caches.match(event.request))
   );
 });

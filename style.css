@@ -616,3 +616,60 @@ textarea{ resize: vertical; }
 .profile-photo-actions{ display:flex; gap:.6rem; flex-wrap:wrap; }
 
 .seal img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+
+/* ===================== দৈনিক লিমিট ===================== */
+.daily-limit-current{ display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; font-size:.92rem; }
+.daily-limit-current strong{ font-family: var(--font-display); color: var(--accent); font-size:1.05rem; }
+.daily-limit-box .form-row{ margin: 1rem 0; text-align:left; }
+.daily-limit-actions{ flex-wrap:wrap; }
+.daily-limit-status{
+  margin-top: 1rem; padding: .8rem 1rem; border-radius:10px; font-size:.88rem;
+  background: var(--accent-soft); border: 1px solid rgba(176,141,79,.3); color: var(--primary-soft);
+  animation: fadeIn .3s ease;
+}
+.daily-limit-status.over{ background: var(--expense-bg); border-color: rgba(124,59,59,.3); color: var(--expense); font-weight:600; }
+
+/* ===================== ক্যালেন্ডার ===================== */
+.calendar-nav{ display:flex; align-items:center; gap:.7rem; font-weight:700; font-family: var(--font-display); font-size:.95rem; }
+.calendar-weekdays{
+  display:grid; grid-template-columns: repeat(7,1fr); text-align:center;
+  font-size:.76rem; color: var(--muted); margin: .9rem 0 .5rem;
+}
+.calendar-grid{ display:grid; grid-template-columns: repeat(7,1fr); gap:.35rem; }
+.calendar-day{
+  aspect-ratio: 1; border:1px solid var(--border); border-radius:8px; padding:.25rem;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.1rem;
+  cursor:pointer; background: var(--surface); transition: all .15s ease; font-size:.72rem;
+  text-align:center;
+}
+.calendar-day:hover{ border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 4px 10px rgba(176,141,79,.15); }
+.calendar-day.empty{ visibility:hidden; cursor:default; }
+.calendar-day.today{ border-color: var(--primary); border-width:2px; }
+.calendar-day.selected{ background: var(--accent-soft); border-color: var(--accent); }
+.calendar-day .day-num{ font-family: var(--font-display); font-weight:700; font-size:.95rem; color: var(--text); }
+.calendar-day .day-amt{ font-size:.64rem; color: var(--muted); }
+.calendar-day.over-limit{ background: var(--expense-bg); border-color: var(--expense); animation: pulseRed 1.8s ease-in-out infinite; }
+.calendar-day.over-limit .day-amt{ color: var(--expense); font-weight:700; }
+.calendar-day.over-limit.selected{ animation:none; }
+@keyframes pulseRed{
+  0%, 100%{ box-shadow: 0 0 0 0 rgba(124,59,59,.25); }
+  50%{ box-shadow: 0 0 0 4px rgba(124,59,59,.12); }
+}
+.calendar-legend{ display:flex; gap:1.2rem; margin-top:1.1rem; font-size:.78rem; color: var(--muted); flex-wrap:wrap; }
+.legend-dot{ display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:.3rem; vertical-align:middle; }
+.legend-dot.normal{ background: var(--surface); border:1px solid var(--border); }
+.legend-dot.over{ background: var(--expense-bg); border:1px solid var(--expense); }
+
+/* ===================== দিনের বিস্তারিত ===================== */
+.day-detail-summary{
+  display:flex; gap:1.4rem; flex-wrap:wrap; margin-bottom:1rem; font-size:.85rem; color: var(--muted);
+}
+.day-detail-summary strong{ font-family: var(--font-display); font-size:1rem; color: var(--text); }
+.day-detail-summary .over,
+.day-detail-summary strong.over{ color: var(--expense); }
+.day-detail-summary .over strong{ color: var(--expense); }
+.day-exception-row{ margin-top:1rem; padding-top:.9rem; border-top:1px dashed var(--border); }
+
+/* ===================== লিমিট অতিক্রম — হাইলাইট ===================== */
+.stat-value.over-limit-text{ color: var(--expense) !important; }
+tr.over-limit-row td{ background: var(--expense-bg) !important; }

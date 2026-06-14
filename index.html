@@ -94,6 +94,9 @@
       <button class="nav-item" data-page="categories">
         <i data-lucide="tags"></i><span>ক্যাটাগরি</span>
       </button>
+      <button class="nav-item" data-page="daily-expenses">
+        <i data-lucide="calendar-range"></i><span>দৈনন্দিন খরচ</span>
+      </button>
       <button class="nav-item" data-page="reports">
         <i data-lucide="bar-chart-3"></i><span>পরিসংখ্যান ও রিপোর্ট</span>
       </button>
@@ -149,7 +152,7 @@
         </div>
 
         <div class="stat-grid">
-          <div class="stat-card clickable" data-page="add-entry" title="বিস্তারিত খরচের তালিকা দেখুন">
+          <div class="stat-card clickable" data-page="daily-expenses" title="দৈনন্দিন খরচের ক্যালেন্ডার দেখুন">
             <div class="stat-icon"><i data-lucide="wallet"></i></div>
             <div>
               <p class="stat-label">আজকের মোট খরচ</p>
@@ -226,7 +229,10 @@
       <!-- ================= নতুন এন্ট্রি ================= -->
       <section class="page" id="add-entry">
         <div class="ledger-card form-card">
-          <div class="card-head"><h3 id="entryFormTitle"><i data-lucide="pencil-line"></i> নতুন এন্ট্রি যোগ করুন</h3></div>
+          <div class="card-head">
+            <h3 id="entryFormTitle"><i data-lucide="pencil-line"></i> নতুন এন্ট্রি যোগ করুন</h3>
+            <button type="button" class="btn btn-ghost" id="openDailyLimitBtnFromEntry"><i data-lucide="gauge"></i> দৈনিক লিমিট</button>
+          </div>
           <form id="entryForm">
             <input type="hidden" id="entryId" />
 
@@ -308,6 +314,7 @@
               <button type="button" class="btn btn-ghost" id="resetFormBtn">রিসেট</button>
             </div>
           </form>
+          <div id="dailyLimitStatus" class="daily-limit-status" style="display:none;"></div>
         </div>
 
         <div class="ledger-card">
@@ -376,7 +383,7 @@
       <!-- ================= ক্যাটাগরি ================= -->
       <section class="page" id="categories">
         <div class="ledger-card form-card">
-          <div class="card-head"><h3><i data-lucide="tag-plus"></i> নতুন ক্যাটাগরি যোগ করুন</h3></div>
+          <div class="card-head"><h3><i data-lucide="tags"></i> নতুন ক্যাটাগরি যোগ করুন</h3></div>
           <form id="categoryForm" class="inline-form">
             <input type="text" id="categoryName" required placeholder="যেমন: ফ্রিল্যান্সিং খরচ" />
             <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> যুক্ত করুন</button>
@@ -391,6 +398,50 @@
           <div class="ledger-card">
             <div class="card-head"><h3><i data-lucide="pie-chart"></i> খাতভিত্তিক চার্ট</h3></div>
             <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= দৈনন্দিন খরচ ================= -->
+      <section class="page" id="daily-expenses">
+        <div class="ledger-card daily-limit-card">
+          <div class="card-head"><h3><i data-lucide="gauge"></i> দৈনিক খরচের লিমিট</h3></div>
+          <div class="daily-limit-current">
+            <span>বর্তমান দৈনিক লিমিট:</span>
+            <strong id="currentDailyLimitText">নির্ধারিত নেই</strong>
+            <button class="btn btn-ghost" id="changeDailyLimitBtn"><i data-lucide="pencil"></i> পরিবর্তন করুন</button>
+          </div>
+          <p class="hint-text">দৈনিক লিমিট ঠিক করে রাখলে, কোনো দিনের মোট খরচ এই লিমিট পার হয়ে গেলে সেই দিনটি ক্যালেন্ডার, ড্যাশবোর্ড ও তালিকায় লাল চিহ্নিত হয়ে দেখাবে।</p>
+        </div>
+
+        <div class="ledger-card">
+          <div class="card-head">
+            <h3><i data-lucide="calendar-days"></i> মাসিক ক্যালেন্ডার</h3>
+            <div class="calendar-nav">
+              <button class="icon-btn" id="prevMonthBtn"><i data-lucide="chevron-left"></i></button>
+              <span id="calendarMonthLabel">জুন ২০২৬</span>
+              <button class="icon-btn" id="nextMonthBtn"><i data-lucide="chevron-right"></i></button>
+            </div>
+          </div>
+          <div class="calendar-weekdays">
+            <span>রবি</span><span>সোম</span><span>মঙ্গল</span><span>বুধ</span><span>বৃহঃ</span><span>শুক্র</span><span>শনি</span>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+          <div class="calendar-legend">
+            <span><span class="legend-dot normal"></span> স্বাভাবিক</span>
+            <span><span class="legend-dot over"></span> লিমিট অতিক্রম</span>
+          </div>
+        </div>
+
+        <div class="ledger-card" id="dayDetailCard" style="display:none;">
+          <div class="card-head"><h3 id="dayDetailTitle"><i data-lucide="calendar-check"></i> বিস্তারিত</h3></div>
+          <div class="day-detail-summary" id="dayDetailSummary"></div>
+          <div id="dayDetailList" class="entry-list"></div>
+          <div class="day-exception-row" id="dayExceptionRow" style="display:none;">
+            <label class="checkbox-label">
+              <input type="checkbox" id="dayExceptionCheckbox" />
+              <span>এই দিনের হিসাব দৈনিক লিমিটের বাইরে রাখুন (লাল চিহ্নিত হবে না)</span>
+            </label>
           </div>
         </div>
       </section>
@@ -616,6 +667,24 @@
     <div id="contactPickerList" class="contact-picker-list"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="contactPickerCloseBtn">বাতিল</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ মোডাল: দৈনিক লিমিট পরিবর্তন ============ -->
+<div class="modal-overlay" id="dailyLimitModal">
+  <div class="modal-box daily-limit-box">
+    <div class="modal-icon"><i data-lucide="gauge"></i></div>
+    <h3>দৈনিক খরচের লিমিট</h3>
+    <p class="hint-text">বর্তমান লিমিট: <strong id="modalCurrentLimitText">নির্ধারিত নেই</strong></p>
+    <div class="form-row">
+      <label for="newDailyLimitInput">নতুন দৈনিক লিমিট (৳)</label>
+      <input type="number" id="newDailyLimitInput" min="0" step="1" placeholder="যেমন: ৫০০" />
+    </div>
+    <div class="modal-actions daily-limit-actions">
+      <button class="btn btn-primary" id="applyLimitTodayBtn">আজ থেকে কার্যকর</button>
+      <button class="btn btn-primary" id="applyLimitTomorrowBtn">আগামীকাল থেকে কার্যকর</button>
+      <button class="btn btn-ghost" id="cancelLimitBtn">বাতিল</button>
     </div>
   </div>
 </div>
