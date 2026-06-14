@@ -203,6 +203,24 @@
               </div>
               <p class="budget-remaining" id="budgetRemainingText"></p>
             </div>
+
+            <div class="budget-divider"></div>
+
+            <div class="card-head">
+              <h3><i data-lucide="gauge"></i> দৈনিক খরচের লিমিট</h3>
+              <button class="link-btn" data-page="daily-expenses">সেট করুন</button>
+            </div>
+            <div id="dailyLimitEmptyState" class="hint-text" style="display:none;">এখনো কোনো দৈনিক লিমিট নির্ধারণ করা হয়নি। "দৈনন্দিন খরচ" পেজ থেকে লিমিট সেট করুন।</div>
+            <div id="dailyLimitContent">
+              <div class="budget-row">
+                <span id="dailyLimitSpentLabel">আজ খরচ হয়েছে: ৳ ০</span>
+                <span id="dailyLimitTotalLabel">লিমিট: ৳ ০</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" id="dailyLimitProgressFill" style="width:0%"></div>
+              </div>
+              <p class="budget-remaining" id="dailyLimitRemainingText"></p>
+            </div>
           </div>
 
           <div class="ledger-card reminder-card">

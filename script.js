@@ -91,6 +91,18 @@ if(firebaseReady){
   firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   db = firebase.firestore();
+
+  // অফলাইন সাপোর্ট চালু — ইন্টারনেট না থাকলেও অ্যাপ ব্যবহার/তথ্য পরিবর্তন করা যাবে,
+  // এবং ইন্টারনেট ফিরে আসলে স্বয়ংক্রিয়ভাবে ক্লাউডের সাথে সিঙ্ক হয়ে যাবে।
+  db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+    if(err.code === 'failed-precondition'){
+      console.warn('অফলাইন সাপোর্ট শুধু একটি ট্যাবে চালু থাকতে পারে।');
+    } else if(err.code === 'unimplemented'){
+      console.warn('এই ব্রাউজারে অফলাইন সাপোর্ট নেই।');
+    } else {
+      console.warn('অফলাইন সাপোর্ট চালু করতে সমস্যা:', err);
+    }
+  });
 }
 
 let currentUser = null;
@@ -103,7 +115,7 @@ function setSyncStatus(status){
   const icon = document.getElementById('syncIcon');
   const text = document.getElementById('syncText');
   if(!el) return;
-  el.classList.remove('synced','syncing','error');
+  el.classList.remove('synced','syncing','error','pending');
   if(status === 'syncing'){
     el.classList.add('syncing');
     icon.setAttribute('data-lucide','refresh-cw');
@@ -112,6 +124,10 @@ function setSyncStatus(status){
     el.classList.add('synced');
     icon.setAttribute('data-lucide','check-circle-2');
     text.textContent = 'সিঙ্ক সম্পন্ন';
+  } else if(status === 'pending'){
+    el.classList.add('pending');
+    icon.setAttribute('data-lucide','cloud-upload');
+    text.textContent = 'অফলাইন — পরে সিঙ্ক হবে';
   } else if(status === 'error'){
     el.classList.add('error');
     icon.setAttribute('data-lucide','cloud-off');
@@ -156,12 +172,25 @@ function manualRefresh(){
     })
     .catch(err => {
       console.error("রিফ্রেশ সমস্যা:", err);
-      setSyncStatus('error');
+      if(!navigator.onLine || err.code === 'unavailable'){
+        setSyncStatus('pending');
+        toast('ইন্টারনেট সংযোগ নেই — অফলাইনে পরিবর্তন করা যাবে, পরে সিঙ্ক হবে।');
+      } else {
+        setSyncStatus('error');
+      }
     })
     .finally(() => { isApplyingRemoteUpdate = false; });
 }
 
 document.getElementById('syncStatus').addEventListener('click', manualRefresh);
+
+// ইন্টারনেট সংযোগের অবস্থা পরিবর্তন হলে সিঙ্ক স্ট্যাটাস আপডেট করা
+window.addEventListener('offline', () => {
+  if(currentUser) setSyncStatus('pending');
+});
+window.addEventListener('online', () => {
+  if(currentUser) setSyncStatus('syncing');
+});
 
 function translateAuthError(err){
   const map = {
@@ -253,13 +282,15 @@ function setupAuthUI(){
       passwordInput.value = '';
       setSyncStatus('syncing');
 
-      firestoreUnsub = db.collection('users').doc(user.uid).onSnapshot(docSnap => {
+      // অফলাইনে থাকা অবস্থায় ক্যাশড ডেটাও দেখানোর জন্য includeMetadataChanges:true
+      firestoreUnsub = db.collection('users').doc(user.uid)
+        .onSnapshot({ includeMetadataChanges: true }, docSnap => {
         isApplyingRemoteUpdate = true;
         try{
           if(docSnap.exists && docSnap.data().state){
             state = mergeWithDefaults(docSnap.data().state);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-          } else {
+          } else if(!docSnap.exists) {
             // ক্লাউডে এখনো কোনো ডেটা নেই — বর্তমান (লোকাল) ডেটা ক্লাউডে পাঠানো হচ্ছে
             db.collection('users').doc(user.uid).set({
               state: state,
@@ -268,7 +299,16 @@ function setupAuthUI(){
           }
           renderAll();
           loadSettingsForm();
-          setSyncStatus('synced');
+
+          // সিঙ্ক স্ট্যাটাস — অফলাইনে পরিবর্তন করলে "পরে সিঙ্ক হবে" দেখাবে,
+          // ইন্টারনেট ফিরে এসে সার্ভারে পৌঁছালে "সিঙ্ক সম্পন্ন" দেখাবে
+          if(docSnap.metadata.hasPendingWrites){
+            setSyncStatus('pending');
+          } else if(docSnap.metadata.fromCache && !navigator.onLine){
+            setSyncStatus('pending');
+          } else {
+            setSyncStatus('synced');
+          }
         }catch(e){
           console.error("রেন্ডারে সমস্যা:", e);
           setSyncStatus('error');
@@ -931,6 +971,33 @@ function renderDashboard(){
     } else {
       remainText.textContent = `বাজেট অতিক্রম হয়েছে: ${taka(Math.abs(remain))}`;
       remainText.className = 'budget-remaining over';
+    }
+  }
+
+  // দৈনিক খরচের লিমিট
+  const dailyLimit = getCurrentDailyLimit();
+  const dailyLimitEmpty = document.getElementById('dailyLimitEmptyState');
+  const dailyLimitContent = document.getElementById('dailyLimitContent');
+  if(dailyLimit <= 0){
+    dailyLimitEmpty.style.display = 'block';
+    dailyLimitContent.style.display = 'none';
+  } else {
+    dailyLimitEmpty.style.display = 'none';
+    dailyLimitContent.style.display = 'block';
+    const pctD = Math.min(100, (todayExpense / dailyLimit) * 100);
+    const fillD = document.getElementById('dailyLimitProgressFill');
+    fillD.style.width = pctD + '%';
+    fillD.classList.toggle('over-budget', todayExpense > dailyLimit);
+    document.getElementById('dailyLimitSpentLabel').textContent = `আজ খরচ হয়েছে: ${taka(todayExpense)}`;
+    document.getElementById('dailyLimitTotalLabel').textContent = `লিমিট: ${taka(dailyLimit)}`;
+    const remainTextD = document.getElementById('dailyLimitRemainingText');
+    const remainD = dailyLimit - todayExpense;
+    if(remainD >= 0){
+      remainTextD.textContent = `আজকের জন্য বাকি আছে: ${taka(remainD)}`;
+      remainTextD.className = 'budget-remaining ok';
+    } else {
+      remainTextD.textContent = `আজকের লিমিট অতিক্রম হয়েছে: ${taka(Math.abs(remainD))}`;
+      remainTextD.className = 'budget-remaining over';
     }
   }
 
