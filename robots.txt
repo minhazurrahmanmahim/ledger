@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://minhazurrahmanmahim.github.io/ledger/sitemap.xml

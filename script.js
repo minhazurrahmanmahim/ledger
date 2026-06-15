@@ -353,6 +353,12 @@ function bnDigits(val){
   return String(val).replace(/[0-9]/g, d => map[d]);
 }
 
+// বাংলা সংখ্যা থাকলে ল্যাটিন (০-৯ → 0-9) সংখ্যায় রূপান্তর — সার্চে কাজে লাগে
+function latinDigits(val){
+  const map = {'০':'0','১':'1','২':'2','৩':'3','৪':'4','৫':'5','৬':'6','৭':'7','৮':'8','৯':'9'};
+  return String(val).replace(/[০-৯]/g, d => map[d]);
+}
+
 function taka(amount){
   const num = Number(amount) || 0;
   const hasDecimal = Math.abs(num % 1) > 0.001;
@@ -433,7 +439,7 @@ function getCurrentDailyLimit(){
 // নির্দিষ্ট তারিখের মোট খরচ
 function getDayExpenseTotal(dateStr){
   return state.entries
-    .filter(e => e.kind === 'expense' && e.date === dateStr)
+    .filter(e => e.kind === 'expense' && e.date === dateStr && !e.excludeFromDaily)
     .reduce((s,e) => s + e.amount, 0);
 }
 
@@ -638,6 +644,8 @@ const categoryRow      = document.getElementById('categoryRow');
 const personRow        = document.getElementById('personRow');
 const entryFormTitle   = document.getElementById('entryFormTitle');
 const tourCheckboxRow  = entryIsTour.closest('.form-row');
+const excludeFromDailyRow   = document.getElementById('excludeFromDailyRow');
+const entryExcludeFromDaily = document.getElementById('entryExcludeFromDaily');
 
 document.querySelectorAll('#entryTypeControl .seg').forEach(seg => {
   seg.addEventListener('click', () => {
@@ -653,13 +661,16 @@ function updateEntryFormForType(){
     categoryRow.style.display = '';
     personRow.style.display = 'none';
     tourCheckboxRow.style.display = '';
+    excludeFromDailyRow.style.display = '';
     entryCategorySel.required = true;
     entryPersonInput.required = false;
   } else {
     categoryRow.style.display = 'none';
     personRow.style.display = '';
     tourCheckboxRow.style.display = 'none';
+    excludeFromDailyRow.style.display = 'none';
     entryIsTour.checked = false;
+    entryExcludeFromDaily.checked = false;
     tourFields.style.display = 'none';
     entryCategorySel.required = false;
     entryPersonInput.required = true;
@@ -668,6 +679,9 @@ function updateEntryFormForType(){
 
 entryIsTour.addEventListener('change', () => {
   tourFields.style.display = entryIsTour.checked ? '' : 'none';
+  // ট্যুরের খরচ সাধারণত দৈনন্দিন বাজেটে ধরা হয় না — তাই ডিফল্টভাবে টিক হয়ে যাবে,
+  // চাইলে ব্যবহারকারী আবার আনচেক করতে পারবেন
+  if(entryIsTour.checked) entryExcludeFromDaily.checked = true;
 });
 
 entryTimeUnknown.addEventListener('change', () => {
@@ -739,6 +753,171 @@ document.getElementById('contactPickerList').addEventListener('click', e => {
 });
 
 document.getElementById('removeLinkedContactBtn').addEventListener('click', clearLinkedContact);
+
+
+/* ===================== গ্লোবাল সার্চ ===================== */
+function openGlobalSearch(){
+  const modal = document.getElementById('globalSearchModal');
+  const input = document.getElementById('globalSearchInput');
+  modal.classList.add('open');
+  input.value = '';
+  renderGlobalSearchResults('');
+  setTimeout(() => input.focus(), 50);
+}
+
+document.getElementById('searchBtn').addEventListener('click', openGlobalSearch);
+document.getElementById('globalSearchCloseBtn').addEventListener('click', () => {
+  document.getElementById('globalSearchModal').classList.remove('open');
+});
+document.getElementById('globalSearchInput').addEventListener('input', e => {
+  renderGlobalSearchResults(e.target.value);
+});
+
+function renderGlobalSearchResults(query){
+  const container = document.getElementById('globalSearchResults');
+  const q = query.trim().toLowerCase();
+  if(!q){
+    container.innerHTML = `<div class="empty-state">টাইপ করা শুরু করুন — টাকার পরিমাণ, ক্যাটাগরি, ব্যক্তির নাম, নোট, ট্যুর, কন্টাক্ট বা নোটস থেকে খুঁজে দেখাবে।</div>`;
+    return;
+  }
+  const qLatin = latinDigits(q);
+  let html = '';
+
+  // লেনদেন (খরচ/পাই/পাওনা)
+  const entryMatches = state.entries.filter(e => {
+    const amountStr = String(e.amount);
+    return (
+      (e.category && e.category.toLowerCase().includes(q)) ||
+      (e.person && e.person.toLowerCase().includes(q)) ||
+      (e.note && e.note.toLowerCase().includes(q)) ||
+      (e.contactName && e.contactName.toLowerCase().includes(q)) ||
+      (e.contactPhone && e.contactPhone.includes(qLatin)) ||
+      amountStr.includes(qLatin) ||
+      formatDateDMY(e.date).includes(bnDigits(qLatin))
+    );
+  }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 25);
+
+  if(entryMatches.length){
+    html += `<div class="search-group-title">লেনদেন (${bnDigits(entryMatches.length)})</div>`;
+    html += entryMatches.map(e => `
+      <div class="search-result-item" data-type="entry" data-id="${e.id}" data-kind="${e.kind}">
+        <div class="search-result-main">
+          <span class="search-result-title">${escapeHtml(entryTitle(e))}</span>
+          <span class="search-result-sub">${entryMetaLine(e)}</span>
+        </div>
+        <span class="search-result-amount ${entryAmountClass(e)}">${taka(e.amount)}</span>
+      </div>
+    `).join('');
+  }
+
+  // কন্টাক্ট
+  const contactMatches = state.contacts.filter(c =>
+    c.name.toLowerCase().includes(q) || (c.phone || '').includes(qLatin)
+  ).slice(0, 10);
+  if(contactMatches.length){
+    html += `<div class="search-group-title">কন্টাক্ট (${bnDigits(contactMatches.length)})</div>`;
+    html += contactMatches.map(c => `
+      <div class="search-result-item" data-type="contact" data-id="${c.id}">
+        <div class="search-result-main">
+          <span class="search-result-title">${escapeHtml(c.name)}</span>
+          <span class="search-result-sub">${escapeHtml(c.phone || '')}</span>
+        </div>
+        <i data-lucide="chevron-right" class="stat-arrow" style="position:static;"></i>
+      </div>
+    `).join('');
+  }
+
+  // ট্যুর
+  const tourMatches = state.tours.filter(t => t.name.toLowerCase().includes(q)).slice(0, 10);
+  if(tourMatches.length){
+    html += `<div class="search-group-title">ট্যুর (${bnDigits(tourMatches.length)})</div>`;
+    html += tourMatches.map(t => `
+      <div class="search-result-item" data-type="tour" data-id="${t.id}">
+        <div class="search-result-main">
+          <span class="search-result-title">${escapeHtml(t.name)}</span>
+          <span class="search-result-sub">${formatDateDMY(t.start)} – ${formatDateDMY(t.end)}</span>
+        </div>
+        <i data-lucide="chevron-right" class="stat-arrow" style="position:static;"></i>
+      </div>
+    `).join('');
+  }
+
+  // নোটস
+  const noteMatches = (state.notes || []).filter(n =>
+    (n.title || '').toLowerCase().includes(q) || (n.content || '').toLowerCase().includes(q)
+  ).slice(0, 10);
+  if(noteMatches.length){
+    html += `<div class="search-group-title">নোটস (${bnDigits(noteMatches.length)})</div>`;
+    html += noteMatches.map(n => `
+      <div class="search-result-item" data-type="note" data-id="${n.id}">
+        <div class="search-result-main">
+          <span class="search-result-title">${escapeHtml(n.title || 'শিরোনামহীন নোট')}</span>
+          <span class="search-result-sub">${escapeHtml((n.content || '').slice(0, 60))}</span>
+        </div>
+        <i data-lucide="chevron-right" class="stat-arrow" style="position:static;"></i>
+      </div>
+    `).join('');
+  }
+
+  // ক্যাটাগরি
+  const catMatches = state.categories.filter(c => c.toLowerCase().includes(q)).slice(0, 5);
+  if(catMatches.length){
+    html += `<div class="search-group-title">ক্যাটাগরি (${bnDigits(catMatches.length)})</div>`;
+    html += catMatches.map(c => `
+      <div class="search-result-item" data-type="category" data-id="${escapeHtml(c)}">
+        <div class="search-result-main"><span class="search-result-title">${escapeHtml(c)}</span></div>
+        <i data-lucide="chevron-right" class="stat-arrow" style="position:static;"></i>
+      </div>
+    `).join('');
+  }
+
+  if(!html){
+    html = `<div class="empty-state">কোনো ফলাফল পাওয়া যায়নি।</div>`;
+  }
+  container.innerHTML = html;
+  refreshIcons();
+}
+
+document.getElementById('globalSearchResults').addEventListener('click', e => {
+  const item = e.target.closest('.search-result-item');
+  if(!item) return;
+  const { type, id, kind } = item.dataset;
+  document.getElementById('globalSearchModal').classList.remove('open');
+
+  if(type === 'entry'){
+    if(kind === 'expense'){
+      goToPage('add-entry');
+      setTimeout(() => editEntry(id), 80);
+    } else {
+      goToPage('receivables');
+    }
+  } else if(type === 'contact'){
+    goToPage('contacts');
+    setTimeout(() => {
+      const searchInput = document.getElementById('contactSearch');
+      if(searchInput){
+        const contact = state.contacts.find(c => c.id === id);
+        if(contact) searchInput.value = contact.name;
+        renderContacts();
+      }
+    }, 80);
+  } else if(type === 'tour'){
+    goToPage('tours');
+  } else if(type === 'note'){
+    goToPage('notes');
+    setTimeout(() => {
+      const note = state.notes.find(n => n.id === id);
+      if(!note) return;
+      document.getElementById('noteId').value = note.id;
+      document.getElementById('noteTitle').value = note.title || '';
+      document.getElementById('noteContent').value = note.content || '';
+      document.getElementById('noteFormTitle').innerHTML = `<i data-lucide="pencil-line"></i> নোট সম্পাদনা করুন`;
+      refreshIcons();
+    }, 80);
+  } else if(type === 'category'){
+    goToPage('categories');
+  }
+});
 
 
 /* ===================== দৈনিক লিমিট মোডাল ===================== */
@@ -818,6 +997,7 @@ entryForm.addEventListener('submit', e => {
     isTour: currentEntryType === 'expense' && entryIsTour.checked,
     tourId: (currentEntryType === 'expense' && entryIsTour.checked) ? entryTourSel.value : null,
     tourCategory: (currentEntryType === 'expense' && entryIsTour.checked) ? entryTourCatSel.value : null,
+    excludeFromDaily: currentEntryType === 'expense' && entryExcludeFromDaily.checked,
   };
 
   if(editingId){
@@ -882,6 +1062,7 @@ function editEntry(id){
   }
   entryIsTour.checked = !!entry.isTour;
   tourFields.style.display = entry.isTour ? '' : 'none';
+  entryExcludeFromDaily.checked = !!entry.excludeFromDaily;
   if(entry.isTour){
     entryTourSel.value = entry.tourId || '';
     entryTourCatSel.value = entry.tourCategory || 'ভাড়া';
@@ -1060,7 +1241,7 @@ function renderExpenseTable(){
     <tr class="${isDayOverLimit(e.date) ? 'over-limit-row' : ''}">
       <td>${formatDateDMY(e.date)}</td>
       <td>${formatTimeBn(e.time)}</td>
-      <td>${escapeHtml(e.category || '')}${e.isTour ? ` <span class="badge income" style="font-size:.65rem;padding:.1rem .5rem;">ট্যুর</span>` : ''}</td>
+      <td>${escapeHtml(e.category || '')}${e.isTour ? ` <span class="badge income" style="font-size:.65rem;padding:.1rem .5rem;">ট্যুর</span>` : ''}${e.excludeFromDaily ? ` <span class="badge-mini">দৈনন্দিনের বাইরে</span>` : ''}</td>
       <td>${escapeHtml(e.note || '')}</td>
       <td class="num expense">${taka(e.amount)}</td>
       <td>
@@ -2156,7 +2337,7 @@ function renderDayDetail(dateStr){
     list.innerHTML = dayEntries.map(e => `
       <div class="entry-row">
         <div class="entry-main">
-          <span class="entry-title">${escapeHtml(entryTitle(e))}</span>
+          <span class="entry-title">${escapeHtml(entryTitle(e))}${e.excludeFromDaily ? ` <span class="badge-mini">দৈনন্দিনের বাইরে</span>` : ''}</span>
           <span class="entry-sub">${entryMetaLine(e)}</span>
         </div>
         <span class="entry-amount ${entryAmountClass(e)}">${taka(e.amount)}</span>

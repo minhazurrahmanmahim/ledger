@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ব্যক্তিগত হিসাব-খাতা | মো. মিনহাজুর রহমান মাহিম</title>
+<title>Mahim's Ledger | ব্যক্তিগত হিসাব-খাতা</title>
+<meta name="description" content="Mahim's Ledger — ব্যক্তিগত খরচ, পাই-পাওনা, ট্যুর হিসাব, বাজেট ও দৈনিক খরচের লিমিট ট্র্যাক করার জন্য একটি প্রিমিয়াম বাংলা ওয়েব অ্যাপ।" />
+<meta name="robots" content="index, follow" />
 
 <!-- PWA — হোম স্ক্রিনে অ্যাপ হিসেবে ইনস্টল করার জন্য -->
 <link rel="manifest" href="manifest.json" />
@@ -12,7 +14,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="মাহিম'স লেজার" />
+<meta name="apple-mobile-web-app-title" content="Mahim's Ledger" />
 
 <!-- ফন্ট -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,7 +43,7 @@
 <div id="authOverlay" class="auth-overlay">
   <div class="auth-card">
     <div class="seal auth-seal">মি.মা.</div>
-    <h1 class="auth-title">মাহিম'স লেজার</h1>
+    <h1 class="auth-title">Mahim's Ledger</h1>
     <p class="auth-subtitle">ক্লাউড সিঙ্ক চালু করতে লগইন করুন — যেকোনো ডিভাইস থেকে একই হিসাব দেখতে ও আপডেট করতে পারবেন।</p>
 
     <div class="form-grid">
@@ -73,7 +75,7 @@
     <div class="sidebar-brand">
       <div class="seal" id="sidebarSeal">মি.মা.</div>
       <div class="brand-text">
-        <h1>মাহিম'স লেজার</h1>
+        <h1>Mahim's Ledger</h1>
         <p>ব্যক্তিগত হিসাব-খাতা</p>
       </div>
     </div>
@@ -141,6 +143,9 @@
         <i data-lucide="cloud" id="syncIcon"></i>
         <span id="syncText">সিঙ্ক হচ্ছে...</span>
       </div>
+      <button class="bell-btn" id="searchBtn" title="সার্চ করুন">
+        <i data-lucide="search"></i>
+      </button>
       <button class="bell-btn" id="bellBtn" title="রিমাইন্ডার সেটিংস">
         <i data-lucide="bell"></i>
       </button>
@@ -308,6 +313,12 @@
                 <label class="checkbox-label">
                   <input type="checkbox" id="entryIsTour" />
                   <span>এটি একটি ট্যুর সম্পর্কিত খরচ</span>
+                </label>
+              </div>
+              <div class="form-row checkbox-row" id="excludeFromDailyRow" style="display:none;">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="entryExcludeFromDaily" />
+                  <span>এই খরচ "দৈনন্দিন খরচ"-এর মোট/লিমিটে যুক্ত হবে না</span>
                 </label>
               </div>
             </div>
@@ -783,6 +794,20 @@
     <div id="contactPickerList" class="contact-picker-list"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="contactPickerCloseBtn">বাতিল</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ মোডাল: গ্লোবাল সার্চ ============ -->
+<div class="modal-overlay" id="globalSearchModal">
+  <div class="modal-box search-box">
+    <div class="search-input-row">
+      <i data-lucide="search"></i>
+      <input type="text" id="globalSearchInput" placeholder="টাকার পরিমাণ, খাত, নাম, নোট... যা খুশি লিখুন" autocomplete="off" />
+      <button type="button" id="globalSearchCloseBtn" title="বন্ধ করুন"><i data-lucide="x"></i></button>
+    </div>
+    <div id="globalSearchResults" class="search-results">
+      <div class="empty-state">টাইপ করা শুরু করুন — টাকার পরিমাণ, ক্যাটাগরি, ব্যক্তির নাম, নোট, ট্যুর, কন্টাক্ট বা নোটস থেকে খুঁজে দেখাবে।</div>
     </div>
   </div>
 </div>

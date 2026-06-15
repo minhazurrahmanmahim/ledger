@@ -1,6 +1,6 @@
 {
-  "name": "মাহিম'স লেজার",
-  "short_name": "মাহিম'স লেজার",
+  "name": "Mahim's Ledger",
+  "short_name": "Mahim's Ledger",
   "description": "ব্যক্তিগত হিসাব-খাতা — খরচ, পাই-পাওনা ও বাজেট ব্যবস্থাপনা",
   "start_url": "./index.html",
   "scope": "./",
