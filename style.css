@@ -764,3 +764,16 @@ tr.over-limit-row td{ background: var(--expense-bg) !important; }
   .calc-result{ font-size:1.5rem; }
   .calc-btn{ font-size:1.05rem; padding:.8rem 0; }
 }
+
+/* ===================== দৈনন্দিন খরচ চার্ট রেঞ্জ বাটন ===================== */
+.daily-chart-range{ display:flex; gap:.4rem; flex-wrap:wrap; }
+.seg-btn{
+  font-size:.78rem; font-weight:600; padding:.35rem .8rem; border-radius:999px;
+  border:1px solid var(--border); background: var(--surface); color: var(--primary-soft);
+  cursor:pointer; transition: all .15s ease;
+}
+.seg-btn:hover{ border-color: var(--accent); color: var(--accent); }
+.seg-btn.active{
+  background: linear-gradient(145deg, var(--primary), var(--primary-soft));
+  color: var(--accent); border-color: var(--primary);
+}

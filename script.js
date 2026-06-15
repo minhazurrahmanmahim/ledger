@@ -1402,6 +1402,8 @@ function renderCategories(){
    ===================================================================== */
 let monthlyChartInstance = null;
 let yearlyChartInstance = null;
+let dailyChartInstance = null;
+let dailyChartRangeDays = 14;
 let currentFilteredEntries = [];
 
 function populateReportCategorySelect(){
@@ -1463,6 +1465,61 @@ function renderReportTable(){
 function renderCharts(){
   if(typeof Chart === 'undefined') return;
 
+  // দৈনন্দিন খরচের চার্ট (সাম্প্রতিক N দিন)
+  const dailyLabels = [];
+  const dailyData = [];
+  const dailyLimitData = [];
+  const dailyColors = [];
+  for(let i = dailyChartRangeDays - 1; i >= 0; i--){
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+    const total = getDayExpenseTotal(dateStr);
+    const limit = getDailyLimitForDate(dateStr);
+    dailyLabels.push(bnDigits(d.getDate()) + ' ' + MONTHS_BN[d.getMonth()].slice(0,3));
+    dailyData.push(total);
+    dailyLimitData.push(limit > 0 ? limit : null);
+    dailyColors.push(isDayOverLimit(dateStr) ? '#7C3B3B' : '#2B3D2F');
+  }
+
+  const ctxD = document.getElementById('dailyChart');
+  if(dailyChartInstance) dailyChartInstance.destroy();
+  dailyChartInstance = new Chart(ctxD, {
+    type: 'bar',
+    data: {
+      labels: dailyLabels,
+      datasets: [
+        {
+          label: 'দৈনিক খরচ',
+          data: dailyData,
+          backgroundColor: dailyColors,
+          borderRadius: 5,
+          order: 2
+        },
+        {
+          label: 'দৈনিক লিমিট',
+          data: dailyLimitData,
+          type: 'line',
+          borderColor: '#B08D4F',
+          borderDash: [6,4],
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false,
+          spanGaps: true,
+          order: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { family: "'Hind Siliguri', sans-serif" }, maxRotation: 0, autoSkip: true } },
+        y: { ticks: { callback: v => bnDigits(v), font: { family: "'Hind Siliguri', sans-serif" } } }
+      }
+    }
+  });
+
   const year = new Date().getFullYear();
   const monthly = new Array(12).fill(0);
   const yearly = {};
@@ -1511,6 +1568,15 @@ function renderCharts(){
     }
   });
 }
+
+document.querySelectorAll('.daily-chart-range .seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.daily-chart-range .seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    dailyChartRangeDays = Number(btn.dataset.days);
+    renderCharts();
+  });
+});
 
 /* ----- PDF/প্রিন্ট এক্সপোর্ট ----- */
 document.getElementById('downloadPdfBtn').addEventListener('click', () => {

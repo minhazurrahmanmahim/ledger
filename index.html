@@ -505,6 +505,22 @@
           </div>
         </div>
 
+        <div class="ledger-card">
+          <div class="card-head">
+            <h3><i data-lucide="activity"></i> দৈনন্দিন খরচ (সাম্প্রতিক দিনগুলো)</h3>
+            <div class="daily-chart-range">
+              <button class="seg-btn active" data-days="14">১৪ দিন</button>
+              <button class="seg-btn" data-days="30">৩০ দিন</button>
+              <button class="seg-btn" data-days="90">৯০ দিন</button>
+            </div>
+          </div>
+          <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
+          <div class="calendar-legend">
+            <span><span class="legend-dot normal" style="background:#2B3D2F;"></span> দৈনিক খরচ</span>
+            <span><span class="legend-dot over" style="background:transparent;border-color:#B08D4F;border-style:dashed;"></span> দৈনিক লিমিট</span>
+          </div>
+        </div>
+
         <div class="dashboard-grid two-col">
           <div class="ledger-card">
             <div class="card-head"><h3><i data-lucide="bar-chart-3"></i> মাসিক খরচ (চলতি বছর)</h3></div>
