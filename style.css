@@ -221,19 +221,25 @@ h1,h2,h3,h4{ font-family: var(--font-display); color: var(--primary); margin:0; 
 /* ===================== এন্ট্রি লিস্ট ===================== */
 .entry-list{ display:flex; flex-direction:column; gap:.6rem; max-height: 600px; overflow-y:auto; }
 .entry-row{
-  display:flex; align-items:center; justify-content:space-between; gap:.5rem .75rem; flex-wrap:wrap;
+  display:flex; align-items:center; justify-content:space-between; gap:.5rem .75rem; flex-wrap:nowrap;
   padding: .7rem .9rem; border:1px solid var(--border); border-radius: 10px;
   background: linear-gradient(0deg, rgba(176,141,79,.03), transparent);
   transition: border-color .15s ease, background .15s ease;
 }
 .entry-row:hover{ border-color: var(--accent); background: var(--accent-soft); }
-.entry-row .entry-main{ display:flex; flex-direction:column; gap:.15rem; min-width:0; }
+.entry-row .entry-main{ display:flex; flex-direction:column; gap:.15rem; min-width:0; flex:1 1 auto; }
 .entry-row .entry-title{ font-weight:600; font-size:.92rem; color: var(--text); }
-.entry-row .entry-sub{ font-size:.76rem; color: var(--muted); }
+.entry-row .entry-sub{ font-size:.76rem; color: var(--muted); overflow-wrap:break-word; }
 .entry-amount{ font-family: var(--font-display); font-weight:700; font-size:1rem; white-space:nowrap; flex-shrink:0; }
 .entry-amount.income{ color: var(--income); }
 .entry-amount.expense{ color: var(--expense); }
 .entry-actions{ display:flex; gap:.35rem; align-items:center; flex-shrink:0; }
+
+@media (max-width: 480px){
+  .entry-row{ align-items:flex-start; }
+  .entry-amount{ font-size:.88rem; }
+  .icon-btn{ width:28px; height:28px; }
+}
 
 .icon-btn{
   border:1px solid var(--border); background: var(--surface); border-radius:8px;
@@ -552,7 +558,7 @@ textarea{ resize: vertical; }
   display:flex; padding-top:.7rem;
   animation: dueDetailIn .25s ease;
 }
-.due-group-detail .entry-row{ background: var(--surface); flex-wrap: wrap; }
+.due-group-detail .entry-row{ background: var(--surface); }
 
 @keyframes dueDetailIn{
   from{ opacity:0; transform: translateY(-6px); }
@@ -694,4 +700,67 @@ textarea{ resize: vertical; }
 .stat-value.over-limit-text{ color: var(--expense) !important; }
 tr.over-limit-row td{ background: var(--expense-bg) !important; }
 
-.budget-divider{ height:1px; background: var(--border); margin: 1.1rem 0; border:none; }
+.budget-divider{ height:1px; background: var(--border); margin: 1.4rem 0 1.2rem; border:none; }
+
+.report-include-row{
+  display:flex; align-items:center; gap:1.2rem; flex-wrap:wrap;
+  margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border);
+}
+.report-include-label{ font-size:.85rem; color: var(--muted); }
+
+/* ===================== ক্যালকুলেটর ===================== */
+.calculator-card{ max-width: 420px; margin-left:auto; margin-right:auto; }
+.calc-display{
+  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.1rem 1.2rem; margin-bottom: 1rem; text-align:right; min-height: 88px;
+  display:flex; flex-direction:column; justify-content:flex-end; gap:.3rem; overflow:hidden;
+}
+.calc-expression{
+  font-size:.95rem; color: var(--muted); min-height:1.3em;
+  overflow-x:auto; white-space:nowrap; font-family: var(--font-display);
+}
+.calc-result{
+  font-size:1.9rem; font-weight:700; font-family: var(--font-display); color: var(--text);
+  overflow-x:auto; white-space:nowrap;
+}
+.calc-grid{ display:grid; grid-template-columns: repeat(4, 1fr); gap:.6rem; }
+.calc-btn{
+  font-family: var(--font-display); font-size:1.2rem; font-weight:600;
+  padding: .9rem 0; border-radius: 12px; border:1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor:pointer;
+  transition: all .12s ease; display:flex; align-items:center; justify-content:center;
+}
+.calc-btn:hover{ border-color: var(--accent); transform: translateY(-1px); }
+.calc-btn:active{ transform: scale(.95); background: var(--accent-soft); }
+.calc-btn i{ width:18px; height:18px; }
+.calc-btn.calc-op{ color: var(--accent); border-color: rgba(176,141,79,.35); }
+.calc-btn.calc-fn{ color: var(--expense); }
+.calc-btn.calc-equals{
+  background: linear-gradient(145deg, var(--primary), var(--primary-soft));
+  color: var(--accent); border-color: var(--primary); grid-column: span 1;
+}
+.calc-btn.calc-equals:hover{ color: #fff; }
+.calc-btn.calc-zero{ grid-column: span 2; }
+
+/* ===================== নোটস ===================== */
+.notes-list{ display:flex; flex-direction:column; gap:.7rem; }
+.note-card{
+  border:1px solid var(--border); border-radius:10px; padding:.8rem 1rem;
+  background: linear-gradient(0deg, rgba(176,141,79,.03), transparent);
+  transition: border-color .15s ease, background .15s ease; cursor:pointer;
+}
+.note-card:hover{ border-color: var(--accent); background: var(--accent-soft); }
+.note-card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:.6rem; }
+.note-card-title{ font-weight:600; font-size:.95rem; color: var(--text); }
+.note-card-date{ font-size:.74rem; color: var(--muted); white-space:nowrap; flex-shrink:0; }
+.note-card-preview{
+  font-size:.85rem; color: var(--muted); margin-top:.35rem;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  white-space:pre-line;
+}
+.note-card-actions{ display:flex; gap:.35rem; margin-top:.6rem; }
+
+@media (max-width: 480px){
+  .calc-result{ font-size:1.5rem; }
+  .calc-btn{ font-size:1.05rem; padding:.8rem 0; }
+}

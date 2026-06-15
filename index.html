@@ -106,6 +106,12 @@
       <button class="nav-item" data-page="archive">
         <i data-lucide="archive"></i><span>আর্কাইভ</span>
       </button>
+      <button class="nav-item" data-page="calculator">
+        <i data-lucide="calculator"></i><span>ক্যালকুলেটর</span>
+      </button>
+      <button class="nav-item" data-page="notes">
+        <i data-lucide="notebook-pen"></i><span>নোটস</span>
+      </button>
       <button class="nav-item" data-page="settings">
         <i data-lucide="settings"></i><span>সেটিংস</span>
       </button>
@@ -486,6 +492,17 @@
               <button class="btn btn-ghost" id="clearFilterBtn">মুছুন</button>
             </div>
           </div>
+          <div class="report-include-row">
+            <span class="report-include-label">তালিকা ও ডাউনলোডে অন্তর্ভুক্ত করুন:</span>
+            <label class="checkbox-label">
+              <input type="checkbox" id="includeReceivable" checked />
+              <span>পাই (অন্যের কাছে)</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="includePayable" checked />
+              <span>পাওনা (আমার কাছে)</span>
+            </label>
+          </div>
         </div>
 
         <div class="dashboard-grid two-col">
@@ -567,6 +584,71 @@
               <tbody></tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      <!-- ================= ক্যালকুলেটর ================= -->
+      <section class="page" id="calculator">
+        <div class="ledger-card calculator-card">
+          <div class="card-head"><h3><i data-lucide="calculator"></i> ক্যালকুলেটর</h3></div>
+          <div class="calc-display">
+            <div class="calc-expression" id="calcExpression">&nbsp;</div>
+            <div class="calc-result" id="calcResult">০</div>
+          </div>
+          <div class="calc-grid">
+            <button class="calc-btn calc-fn" data-key="clear">C</button>
+            <button class="calc-btn calc-fn" data-key="backspace"><i data-lucide="delete"></i></button>
+            <button class="calc-btn calc-fn" data-key="%">%</button>
+            <button class="calc-btn calc-op" data-key="/">÷</button>
+
+            <button class="calc-btn" data-key="7">৭</button>
+            <button class="calc-btn" data-key="8">৮</button>
+            <button class="calc-btn" data-key="9">৯</button>
+            <button class="calc-btn calc-op" data-key="*">×</button>
+
+            <button class="calc-btn" data-key="4">৪</button>
+            <button class="calc-btn" data-key="5">৫</button>
+            <button class="calc-btn" data-key="6">৬</button>
+            <button class="calc-btn calc-op" data-key="-">−</button>
+
+            <button class="calc-btn" data-key="1">১</button>
+            <button class="calc-btn" data-key="2">২</button>
+            <button class="calc-btn" data-key="3">৩</button>
+            <button class="calc-btn calc-op" data-key="+">+</button>
+
+            <button class="calc-btn calc-zero" data-key="0">০</button>
+            <button class="calc-btn" data-key=".">.</button>
+            <button class="calc-btn calc-equals" data-key="=">=</button>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="calcUseAsExpenseBtn"><i data-lucide="arrow-right-circle"></i> এই ফলাফল দিয়ে নতুন এন্ট্রি যুক্ত করুন</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= নোটস ================= -->
+      <section class="page" id="notes">
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3 id="noteFormTitle"><i data-lucide="notebook-pen"></i> নতুন নোট</h3></div>
+          <input type="hidden" id="noteId" />
+          <div class="form-row">
+            <label for="noteTitle">শিরোনাম (ঐচ্ছিক)</label>
+            <input type="text" id="noteTitle" placeholder="যেমন: বাজারের লিস্ট" />
+          </div>
+          <div class="form-row">
+            <label for="noteContent">লেখা</label>
+            <textarea id="noteContent" rows="5" placeholder="যা ইচ্ছা লিখে রাখুন..."></textarea>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="saveNoteBtn"><i data-lucide="check"></i> সংরক্ষণ করুন</button>
+            <button class="btn btn-ghost" id="resetNoteBtn">রিসেট</button>
+          </div>
+        </div>
+
+        <div class="ledger-card">
+          <div class="card-head"><h3><i data-lucide="list"></i> সব নোট</h3></div>
+          <input type="text" id="noteSearch" placeholder="নোট খুঁজুন..." class="contact-picker-search" style="margin-bottom:1rem;" />
+          <div id="notesList" class="notes-list"></div>
         </div>
       </section>
 

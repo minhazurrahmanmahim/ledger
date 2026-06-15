@@ -25,6 +25,7 @@ function defaultState(){
     contacts: [],    // {id, name, phone}
     dailyLimits: [], // [{amount, effectiveFrom: 'YYYY-MM-DD'}] — দৈনিক খরচের লিমিটের ইতিহাস
     dayExceptions: {}, // { 'YYYY-MM-DD': true } — যেদিনগুলো লিমিট হিসাবের বাইরে রাখা হয়েছে
+    notes: [], // {id, title, content, updatedAt}
     settings: {
       name: "মো. মিনহাজুর রহমান মাহিম",
       reminderEnabled: true,
@@ -49,6 +50,7 @@ function mergeWithDefaults(parsed){
     contacts: parsed.contacts || [],
     dailyLimits: parsed.dailyLimits || [],
     dayExceptions: parsed.dayExceptions || {},
+    notes: parsed.notes || [],
     settings: { ...def.settings, ...(parsed.settings || {}) }
   };
 }
@@ -550,6 +552,8 @@ const PAGE_TITLES = {
   reports: 'পরিসংখ্যান ও রিপোর্ট',
   contacts: 'কন্টাক্টস',
   archive: 'আর্কাইভ',
+  calculator: 'ক্যালকুলেটর',
+  notes: 'নোটস',
   settings: 'সেটিংস'
 };
 
@@ -1413,18 +1417,28 @@ document.getElementById('clearFilterBtn').addEventListener('click', () => {
   document.getElementById('reportFrom').value = '';
   document.getElementById('reportTo').value = '';
   document.getElementById('reportCategory').value = 'all';
+  document.getElementById('includeReceivable').checked = true;
+  document.getElementById('includePayable').checked = true;
   renderReportTable();
+});
+
+['includeReceivable','includePayable'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => renderReportTable());
 });
 
 function renderReportTable(){
   const from = document.getElementById('reportFrom').value;
   const to = document.getElementById('reportTo').value;
   const cat = document.getElementById('reportCategory').value;
+  const includeReceivable = document.getElementById('includeReceivable').checked;
+  const includePayable = document.getElementById('includePayable').checked;
 
   let rows = [...state.entries];
   if(from) rows = rows.filter(e => e.date >= from);
   if(to) rows = rows.filter(e => e.date <= to);
   if(cat !== 'all') rows = rows.filter(e => e.kind === 'expense' && e.category === cat);
+  if(!includeReceivable) rows = rows.filter(e => e.kind !== 'receivable');
+  if(!includePayable) rows = rows.filter(e => e.kind !== 'payable');
 
   rows.sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time));
   currentFilteredEntries = rows;
@@ -1500,8 +1514,10 @@ function renderCharts(){
 
 /* ----- PDF/প্রিন্ট এক্সপোর্ট ----- */
 document.getElementById('downloadPdfBtn').addEventListener('click', () => {
-  if(currentFilteredEntries.length === 0) renderReportTable();
-  const rows = currentFilteredEntries.length ? currentFilteredEntries : state.entries;
+  renderReportTable();
+  const rows = currentFilteredEntries;
+  const includeReceivable = document.getElementById('includeReceivable').checked;
+  const includePayable = document.getElementById('includePayable').checked;
 
   document.getElementById('printName').textContent = state.settings.name;
   const from = document.getElementById('reportFrom').value;
@@ -1528,19 +1544,18 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
   const totalExpense = rows.filter(e=>e.kind==='expense').reduce((s,e)=>s+e.amount,0);
   const totalReceivable = rows.filter(e=>e.kind==='receivable').reduce((s,e)=>s+e.amount,0);
   const totalPayable = rows.filter(e=>e.kind==='payable').reduce((s,e)=>s+e.amount,0);
-  document.getElementById('printSummary').innerHTML = `
-    মোট খরচ: ${taka(totalExpense)} &nbsp;|&nbsp;
-    মোট পাই: ${taka(totalReceivable)} &nbsp;|&nbsp;
-    মোট পাওনা: ${taka(totalPayable)}
-  `;
+  let summaryParts = [`মোট খরচ: ${taka(totalExpense)}`];
+  if(includeReceivable) summaryParts.push(`মোট পাই: ${taka(totalReceivable)}`);
+  if(includePayable) summaryParts.push(`মোট পাওনা: ${taka(totalPayable)}`);
+  document.getElementById('printSummary').innerHTML = summaryParts.join(' &nbsp;|&nbsp; ');
 
   window.print();
 });
 
 /* ----- CSV এক্সপোর্ট ----- */
 document.getElementById('downloadCsvBtn').addEventListener('click', () => {
-  if(currentFilteredEntries.length === 0) renderReportTable();
-  const rows = currentFilteredEntries.length ? currentFilteredEntries : state.entries;
+  renderReportTable();
+  const rows = currentFilteredEntries;
 
   if(rows.length === 0){
     toast('ডাউনলোডের জন্য কোনো তথ্য পাওয়া যায়নি।');
@@ -2140,6 +2155,211 @@ document.getElementById('dayExceptionCheckbox').addEventListener('change', e => 
 });
 
 
+/* =====================================================================
+   ক্যালকুলেটর
+   ===================================================================== */
+let calcExpr = ''; // ব্যবহারকারীর ইনপুট (লাতিন সংখ্যা ও অপারেটরে সংরক্ষিত)
+
+const CALC_OP_SYMBOLS = { '+':'+', '-':'−', '*':'×', '/':'÷' };
+
+function calcDisplayExpr(){
+  let display = calcExpr;
+  Object.keys(CALC_OP_SYMBOLS).forEach(op => {
+    display = display.split(op).join(CALC_OP_SYMBOLS[op]);
+  });
+  return bnDigits(display);
+}
+
+function calcEvaluate(expr){
+  // নিরাপত্তা: শুধু সংখ্যা, দশমিক বিন্দু, +-*/%, এবং বন্ধনী অনুমোদিত
+  if(!/^[0-9+\-*/.%() ]*$/.test(expr)) return null;
+  if(!expr) return null;
+  try{
+    // eslint-disable-next-line no-new-func
+    const result = Function('"use strict"; return (' + expr.replace(/%/g, '/100') + ')')();
+    if(typeof result !== 'number' || !isFinite(result)) return null;
+    return result;
+  }catch(e){
+    return null;
+  }
+}
+
+function renderCalculator(){
+  const exprEl = document.getElementById('calcExpression');
+  const resultEl = document.getElementById('calcResult');
+  if(!exprEl || !resultEl) return;
+
+  exprEl.innerHTML = calcExpr ? calcDisplayExpr() : '&nbsp;';
+
+  const result = calcEvaluate(calcExpr);
+  if(result === null){
+    resultEl.textContent = calcExpr ? '—' : '০';
+  } else {
+    // সংখ্যাটি অতিরিক্ত দশমিক ঘর ছাড়া দেখানো (ফ্লোটিং-পয়েন্ট ত্রুটি এড়াতে)
+    const rounded = Math.round(result * 1e8) / 1e8;
+    resultEl.textContent = bnDigits(
+      rounded.toLocaleString('en-US', { maximumFractionDigits: 8 })
+    );
+  }
+}
+
+document.querySelectorAll('.calc-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.key;
+    if(key === 'clear'){
+      calcExpr = '';
+    } else if(key === 'backspace'){
+      calcExpr = calcExpr.slice(0, -1);
+    } else if(key === '='){
+      const result = calcEvaluate(calcExpr);
+      if(result !== null){
+        const rounded = Math.round(result * 1e8) / 1e8;
+        calcExpr = String(rounded);
+      }
+    } else if(key === '%'){
+      calcExpr += '%';
+    } else if(['+','-','*','/'].includes(key)){
+      // পরপর দুটো অপারেটর এড়ানো
+      if(calcExpr === '' && key !== '-') return;
+      const last = calcExpr.slice(-1);
+      if(['+','-','*','/'].includes(last)){
+        calcExpr = calcExpr.slice(0, -1) + key;
+      } else {
+        calcExpr += key;
+      }
+    } else if(key === '.'){
+      // একই সংখ্যায় একাধিক দশমিক বিন্দু এড়ানো
+      const parts = calcExpr.split(/[+\-*/]/);
+      const currentNum = parts[parts.length - 1];
+      if(!currentNum.includes('.')) calcExpr += '.';
+    } else {
+      // সংখ্যা (০-৯)
+      calcExpr += key;
+    }
+    renderCalculator();
+  });
+});
+
+document.getElementById('calcUseAsExpenseBtn').addEventListener('click', () => {
+  const result = calcEvaluate(calcExpr);
+  if(result === null || result <= 0){
+    toast('প্রথমে ক্যালকুলেটরে একটি ফলাফল হিসাব করুন।');
+    return;
+  }
+  const rounded = Math.round(result * 100) / 100;
+  goToPage('add-entry');
+  setTimeout(() => {
+    entryAmountInput.value = rounded;
+    entryAmountInput.focus();
+  }, 50);
+});
+
+/* =====================================================================
+   নোটস
+   ===================================================================== */
+function renderNotes(){
+  const list = document.getElementById('notesList');
+  if(!list) return;
+  const q = (document.getElementById('noteSearch').value || '').trim().toLowerCase();
+
+  let notes = [...(state.notes || [])];
+  if(q){
+    notes = notes.filter(n =>
+      (n.title || '').toLowerCase().includes(q) || (n.content || '').toLowerCase().includes(q)
+    );
+  }
+  notes.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+  if(notes.length === 0){
+    list.innerHTML = `<div class="empty-state">কোনো নোট পাওয়া যায়নি।</div>`;
+    return;
+  }
+
+  list.innerHTML = notes.map(n => `
+    <div class="note-card" data-id="${n.id}">
+      <div class="note-card-head">
+        <span class="note-card-title">${escapeHtml(n.title || 'শিরোনামহীন নোট')}</span>
+        <span class="note-card-date">${formatDateDMY(n.updatedAt ? n.updatedAt.slice(0,10) : '')}</span>
+      </div>
+      ${n.content ? `<div class="note-card-preview">${escapeHtml(n.content)}</div>` : ''}
+      <div class="note-card-actions">
+        <button class="icon-btn" data-action="edit" data-id="${n.id}" title="সম্পাদনা"><i data-lucide="pencil"></i></button>
+        <button class="icon-btn danger" data-action="delete" data-id="${n.id}" title="ডিলিট"><i data-lucide="trash-2"></i></button>
+      </div>
+    </div>
+  `).join('');
+  refreshIcons();
+}
+
+function resetNoteForm(){
+  document.getElementById('noteId').value = '';
+  document.getElementById('noteTitle').value = '';
+  document.getElementById('noteContent').value = '';
+  document.getElementById('noteFormTitle').innerHTML = `<i data-lucide="notebook-pen"></i> নতুন নোট`;
+  refreshIcons();
+}
+
+document.getElementById('saveNoteBtn').addEventListener('click', () => {
+  const id = document.getElementById('noteId').value;
+  const title = document.getElementById('noteTitle').value.trim();
+  const content = document.getElementById('noteContent').value.trim();
+  if(!title && !content){
+    toast('নোটে কিছু লিখুন।');
+    return;
+  }
+  const now = new Date().toISOString();
+  if(id){
+    const note = state.notes.find(n => n.id === id);
+    if(note){ note.title = title; note.content = content; note.updatedAt = now; }
+  } else {
+    state.notes.unshift({ id: uid(), title, content, updatedAt: now });
+  }
+  saveState();
+  renderNotes();
+  resetNoteForm();
+  toast('নোট সংরক্ষিত হয়েছে।');
+});
+
+document.getElementById('resetNoteBtn').addEventListener('click', resetNoteForm);
+
+document.getElementById('noteSearch').addEventListener('input', renderNotes);
+
+document.getElementById('notesList').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if(btn){
+    const id = btn.dataset.id;
+    if(btn.dataset.action === 'delete'){
+      openConfirm('নোট ডিলিট করুন', 'এই নোটটি স্থায়ীভাবে ডিলিট করতে চান?', () => {
+        state.notes = state.notes.filter(n => n.id !== id);
+        saveState();
+        renderNotes();
+        toast('নোট ডিলিট হয়েছে।');
+      });
+    } else if(btn.dataset.action === 'edit'){
+      const note = state.notes.find(n => n.id === id);
+      if(!note) return;
+      document.getElementById('noteId').value = note.id;
+      document.getElementById('noteTitle').value = note.title || '';
+      document.getElementById('noteContent').value = note.content || '';
+      document.getElementById('noteFormTitle').innerHTML = `<i data-lucide="pencil-line"></i> নোট সম্পাদনা করুন`;
+      refreshIcons();
+    }
+    return;
+  }
+  // কার্ডে ক্লিক করলেও এডিট মোডে যাওয়া
+  const card = e.target.closest('.note-card');
+  if(card){
+    const note = state.notes.find(n => n.id === card.dataset.id);
+    if(!note) return;
+    document.getElementById('noteId').value = note.id;
+    document.getElementById('noteTitle').value = note.title || '';
+    document.getElementById('noteContent').value = note.content || '';
+    document.getElementById('noteFormTitle').innerHTML = `<i data-lucide="pencil-line"></i> নোট সম্পাদনা করুন`;
+    refreshIcons();
+  }
+});
+
+
 function renderAll(){
   renderDashboard();
   renderExpenseTable();
@@ -2152,6 +2372,7 @@ function renderAll(){
   renderCharts();
   renderContacts();
   renderArchive();
+  renderNotes();
   refreshIcons();
 }
 
@@ -2164,7 +2385,7 @@ function init(){
 
   // হোম স্ক্রিন শর্টকাট (#add-entry, #dashboard ইত্যাদি) থেকে সরাসরি পেজ খোলা
   const initialPage = (location.hash || '').replace('#', '') || 'dashboard';
-  const validPages = ['dashboard','add-entry','receivables','tours','categories','daily-expenses','reports','contacts','archive','settings'];
+  const validPages = ['dashboard','add-entry','receivables','tours','categories','daily-expenses','reports','contacts','archive','calculator','notes','settings'];
   const startPage = validPages.includes(initialPage) ? initialPage : 'dashboard';
 
   // প্রাথমিক হিস্ট্রি স্টেট — মোবাইলের ব্যাক বাটন সঠিকভাবে কাজ করার জন্য
@@ -2197,6 +2418,7 @@ function init(){
 
     loadSettingsForm();
     renderAll();
+    renderCalculator();
     refreshIcons();
 
     checkReminder();
