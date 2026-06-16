@@ -921,12 +921,61 @@ document.getElementById('globalSearchResults').addEventListener('click', e => {
 
 
 /* ===================== দৈনিক লিমিট মোডাল ===================== */
+let limitMode = 'auto'; // 'auto' | 'custom'
+
+function getSuggestedDailyLimit(){
+  const budget = state.settings.monthlyBudget || 0;
+  if(budget <= 0) return 0;
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return Math.round(budget / daysInMonth);
+}
+
+function updateLimitModalUI(){
+  const autoSection = document.getElementById('limitAutoSection');
+  const customSection = document.getElementById('limitCustomSection');
+  const hintEl = document.getElementById('limitAutoHint');
+  const suggested = getSuggestedDailyLimit();
+  const budget = state.settings.monthlyBudget || 0;
+
+  if(limitMode === 'auto'){
+    autoSection.style.display = '';
+    customSection.style.display = 'none';
+    if(budget <= 0){
+      hintEl.innerHTML = `<span style="color:var(--expense);">⚠️ মাসিক বাজেট এখনো সেট করা হয়নি। সেটিংস পেজ থেকে মাসিক বাজেট সেট করুন, তারপর এখানে ফিরে আসুন।</span>`;
+    } else {
+      const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
+      hintEl.innerHTML = `মাসিক বাজেট ${taka(budget)} ÷ এই মাসের ${bnDigits(daysInMonth)} দিন = <strong style="color:var(--accent);">দৈনিক ${taka(suggested)}</strong><br><small style="color:var(--muted);">নিচের বাটনে চাপলে এই মান কার্যকর হবে।</small>`;
+    }
+  } else {
+    autoSection.style.display = 'none';
+    customSection.style.display = '';
+  }
+}
+
 function openDailyLimitModal(){
+  limitMode = 'auto';
   document.getElementById('modalCurrentLimitText').textContent = currentLimitDisplayText();
   const current = getCurrentDailyLimit();
   document.getElementById('newDailyLimitInput').value = current > 0 ? current : '';
+  // সেগমেন্ট কন্ট্রোলে auto সক্রিয় করা
+  document.querySelectorAll('#limitTypeControl .seg').forEach(s =>
+    s.classList.toggle('active', s.dataset.val === 'auto')
+  );
+  updateLimitModalUI();
   document.getElementById('dailyLimitModal').classList.add('open');
+  refreshIcons();
 }
+
+document.querySelectorAll('#limitTypeControl .seg').forEach(btn => {
+  btn.addEventListener('click', () => {
+    limitMode = btn.dataset.val;
+    document.querySelectorAll('#limitTypeControl .seg').forEach(s =>
+      s.classList.toggle('active', s.dataset.val === limitMode)
+    );
+    updateLimitModalUI();
+  });
+});
 
 ['changeDailyLimitBtn','openDailyLimitBtnFromEntry'].forEach(id => {
   const el = document.getElementById(id);
@@ -938,15 +987,24 @@ document.getElementById('cancelLimitBtn').addEventListener('click', () => {
 });
 
 function applyDailyLimit(effectiveFrom){
-  const val = Number(document.getElementById('newDailyLimitInput').value);
-  if(!val || val <= 0){
-    toast('সঠিক লিমিট পরিমাণ দিন।');
-    return;
+  let val;
+  if(limitMode === 'auto'){
+    val = getSuggestedDailyLimit();
+    if(!val || val <= 0){
+      toast('আগে সেটিংস পেজ থেকে মাসিক বাজেট সেট করুন।');
+      return;
+    }
+  } else {
+    val = Number(document.getElementById('newDailyLimitInput').value);
+    if(!val || val <= 0){
+      toast('সঠিক লিমিট পরিমাণ দিন।');
+      return;
+    }
   }
   setDailyLimit(val, effectiveFrom);
   document.getElementById('dailyLimitModal').classList.remove('open');
   renderAll();
-  toast('দৈনিক লিমিট সংরক্ষিত হয়েছে।');
+  toast(`দৈনিক লিমিট ${taka(val)} কার্যকর হয়েছে।`);
 }
 
 document.getElementById('applyLimitTodayBtn').addEventListener('click', () => applyDailyLimit(todayStr()));
@@ -968,6 +1026,9 @@ function resetEntryForm(){
   entryTimeUnknown.checked = false;
   currentEntryType = 'expense';
   document.querySelectorAll('#entryTypeControl .seg').forEach(s => s.classList.toggle('active', s.dataset.value === 'expense'));
+  // form.reset() ক্যাটাগরি সিলেক্টের মান মুছে দিতে পারে — তাই আবার পপুলেট করতে হবে
+  populateCategorySelect();
+  populateTourSelect();
   updateEntryFormForType();
   clearLinkedContact();
   entryFormTitle.innerHTML = `<i data-lucide="pencil-line"></i> নতুন এন্ট্রি যোগ করুন`;
@@ -1035,9 +1096,12 @@ function editEntry(id){
   entryIdInput.value = entry.id;
   document.querySelectorAll('#entryTypeControl .seg').forEach(s => s.classList.toggle('active', s.dataset.value === entry.kind));
   currentEntryType = entry.kind;
+  // updateEntryFormForType আগে, তারপর ভ্যালু সেট — না হলে hidden field-এ সেট হয়ে সমস্যা হয়
+  populateCategorySelect();
+  populateTourSelect();
   updateEntryFormForType();
   if(entry.kind === 'expense'){
-    entryCategorySel.value = entry.category || state.categories[0];
+    entryCategorySel.value = entry.category || (state.categories[0] || '');
   } else {
     entryPersonInput.value = entry.person || '';
   }
@@ -2013,13 +2077,42 @@ function parseCSV(text){
 /* =====================================================================
    আর্কাইভ
    ===================================================================== */
+function populateArchiveCategoryFilter(){
+  const sel = document.getElementById('archiveFilterCategory');
+  if(!sel) return;
+  const cats = new Set(state.archive.filter(e=>e.kind==='expense').map(e=>e.category).filter(Boolean));
+  const prev = sel.value;
+  sel.innerHTML = '<option value="all">সব খাত</option>' +
+    [...cats].sort().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if([...cats].includes(prev)) sel.value = prev;
+}
+
 function renderArchive(){
+  populateArchiveCategoryFilter();
   const tbody = document.querySelector('#archiveTable tbody');
   if(state.archive.length === 0){
     tbody.innerHTML = `<tr><td colspan="6" class="empty-state">আর্কাইভ খালি।</td></tr>`;
     return;
   }
-  const list = [...state.archive].sort((a,b)=> new Date(b.archivedAt) - new Date(a.archivedAt));
+  const sortBy      = document.getElementById('archiveSortBy')?.value || 'date-desc';
+  const filterKind  = document.getElementById('archiveFilterKind')?.value || 'all';
+  const filterCat   = document.getElementById('archiveFilterCategory')?.value || 'all';
+
+  let list = [...state.archive];
+  if(filterKind !== 'all') list = list.filter(e => e.kind === filterKind);
+  if(filterCat !== 'all') list = list.filter(e => e.category === filterCat);
+  list.sort((a,b)=>{
+    if(sortBy === 'date-asc')    return new Date(a.archivedAt) - new Date(b.archivedAt);
+    if(sortBy === 'amount-desc') return b.amount - a.amount;
+    if(sortBy === 'amount-asc')  return a.amount - b.amount;
+    return new Date(b.archivedAt) - new Date(a.archivedAt);
+  });
+
+  if(list.length === 0){
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">এই ফিল্টারে কোনো আর্কাইভ নেই।</td></tr>`;
+    return;
+  }
+
   tbody.innerHTML = list.map(e => `
     <tr>
       <td>${formatDateDMY(e.date)}</td>
@@ -2042,20 +2135,22 @@ function renderArchive(){
     const { archivedAt, archiveReason, ...rest } = item;
     state.entries.unshift({ ...rest, settled: false });
     state.archive = state.archive.filter(x => !(x.id === item.id && x.archivedAt === item.archivedAt));
-    saveState();
-    renderAll();
-    toast('এন্ট্রি পুনরুদ্ধার করা হয়েছে।');
+    saveState(); renderAll(); toast('এন্ট্রি পুনরুদ্ধার করা হয়েছে।');
   }));
 
   tbody.querySelectorAll('[data-action="perm-delete"]').forEach(b => b.addEventListener('click', () => {
     openConfirm('স্থায়ীভাবে ডিলিট', 'এই এন্ট্রিটি আর্কাইভ থেকেও স্থায়ীভাবে মুছে যাবে — এটি ফিরিয়ে আনা যাবে না।', () => {
       state.archive = state.archive.filter(x => !(x.id === b.dataset.id && x.archivedAt === b.dataset.archived));
-      saveState();
-      renderAll();
+      saveState(); renderAll();
     });
   }));
   refreshIcons();
 }
+
+['archiveSortBy','archiveFilterKind','archiveFilterCategory'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('change', renderArchive);
+});
 
 /* =====================================================================
    সেটিংস

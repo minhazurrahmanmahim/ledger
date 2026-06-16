@@ -823,3 +823,24 @@ tr.over-limit-row td{ background: var(--expense-bg) !important; }
 @media (max-width: 480px){
   .search-box{ max-height: 85vh; }
 }
+
+/* অথ পেজে অ্যাপ আইকন */
+.auth-logo{
+  width: 72px; height: 72px; border-radius: 50%;
+  border: 2px solid var(--accent);
+  box-shadow: 0 4px 16px rgba(43,61,47,.25);
+  margin: 0 auto 1rem; display:block;
+}
+
+.limit-type-control{ margin: 1rem 0; }
+.limit-auto-hint{ margin:.8rem 0 .4rem; font-size:.88rem; }
+
+.archive-filter-row{
+  display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;
+}
+.archive-filter-row select{
+  font-family: var(--font-body); font-size:.82rem; padding:.35rem .6rem;
+  border:1px solid var(--border); border-radius:8px; background: var(--surface);
+  color: var(--text); cursor:pointer;
+}
+.archive-filter-row select:focus{ outline:none; border-color: var(--accent); }

@@ -42,7 +42,7 @@
 <!-- ============ লগইন / সাইন-আপ ওভারলে ============ -->
 <div id="authOverlay" class="auth-overlay">
   <div class="auth-card">
-    <div class="seal auth-seal">মি.মা.</div>
+    <img src="icons/icon-192.png" alt="Mahim's Ledger" class="auth-logo" />
     <h1 class="auth-title">Mahim's Ledger</h1>
     <p class="auth-subtitle">ক্লাউড সিঙ্ক চালু করতে লগইন করুন — যেকোনো ডিভাইস থেকে একই হিসাব দেখতে ও আপডেট করতে পারবেন।</p>
 
@@ -602,9 +602,26 @@
       <section class="page" id="archive">
         <div class="ledger-card">
           <div class="card-head">
-            <h3><i data-lucide="archive"></i> মুছে ফেলা / পরিবর্তিত এন্ট্রি</h3>
+            <h3><i data-lucide="archive"></i> আর্কাইভ</h3>
+            <div class="archive-filter-row">
+              <select id="archiveSortBy" title="সাজানোর ধরন">
+                <option value="date-desc">তারিখ (নতুন → পুরনো)</option>
+                <option value="date-asc">তারিখ (পুরনো → নতুন)</option>
+                <option value="amount-desc">পরিমাণ (বেশি → কম)</option>
+                <option value="amount-asc">পরিমাণ (কম → বেশি)</option>
+              </select>
+              <select id="archiveFilterKind" title="ধরন অনুযায়ী">
+                <option value="all">সব ধরন</option>
+                <option value="expense">খরচ</option>
+                <option value="receivable">পাই</option>
+                <option value="payable">পাওনা</option>
+              </select>
+              <select id="archiveFilterCategory" title="খাত অনুযায়ী">
+                <option value="all">সব খাত</option>
+              </select>
+            </div>
           </div>
-          <p class="hint-text"><i data-lucide="info"></i> এখানে এমন এন্ট্রি জমা থাকে যেগুলো এডিট বা ডিলিট করা হয়েছে — কোনো ডেটা স্থায়ীভাবে হারিয়ে যায় না। প্রয়োজনে পুনরুদ্ধার (Restore) করতে পারবেন।</p>
+          <p class="hint-text">এডিট/ডিলিট হওয়া এন্ট্রি এখানে জমা থাকে — স্থায়ীভাবে কিছুই হারায় না। প্রয়োজনে পুনরুদ্ধার করুন।</p>
           <div class="table-wrap">
             <table class="ledger-table" id="archiveTable">
               <thead><tr><th>তারিখ</th><th>ধরন</th><th>খাত/ব্যক্তি</th><th class="num">পরিমাণ</th><th>কারণ</th><th></th></tr></thead>
@@ -818,13 +835,26 @@
     <div class="modal-icon"><i data-lucide="gauge"></i></div>
     <h3>দৈনিক খরচের লিমিট</h3>
     <p class="hint-text">বর্তমান লিমিট: <strong id="modalCurrentLimitText">নির্ধারিত নেই</strong></p>
-    <div class="form-row">
-      <label for="newDailyLimitInput">নতুন দৈনিক লিমিট (৳)</label>
-      <input type="number" id="newDailyLimitInput" min="0" step="1" placeholder="যেমন: ৫০০" />
+
+    <div class="seg-control limit-type-control" id="limitTypeControl">
+      <button class="seg active" data-val="auto"><i data-lucide="calculator"></i> মাসিক বাজেট অনুযায়ী</button>
+      <button class="seg" data-val="custom"><i data-lucide="pencil"></i> নিজে নির্ধারণ করুন</button>
     </div>
+
+    <div id="limitAutoSection">
+      <div id="limitAutoHint" class="hint-text limit-auto-hint"></div>
+    </div>
+
+    <div id="limitCustomSection" style="display:none;">
+      <div class="form-row">
+        <label for="newDailyLimitInput">কাস্টম দৈনিক লিমিট (৳)</label>
+        <input type="number" id="newDailyLimitInput" min="0" step="1" placeholder="যেমন: ৫০০" />
+      </div>
+    </div>
+
     <div class="modal-actions daily-limit-actions">
       <button class="btn btn-primary" id="applyLimitTodayBtn">আজ থেকে কার্যকর</button>
-      <button class="btn btn-primary" id="applyLimitTomorrowBtn">আগামীকাল থেকে কার্যকর</button>
+      <button class="btn btn-primary" id="applyLimitTomorrowBtn">আগামীকাল থেকে</button>
       <button class="btn btn-ghost" id="cancelLimitBtn">বাতিল</button>
     </div>
   </div>
