@@ -3,9 +3,33 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Mahim's Ledger | ব্যক্তিগত হিসাব-খাতা</title>
-<meta name="description" content="Mahim's Ledger — ব্যক্তিগত খরচ, পাই-পাওনা, ট্যুর হিসাব, বাজেট ও দৈনিক খরচের লিমিট ট্র্যাক করার জন্য একটি প্রিমিয়াম বাংলা ওয়েব অ্যাপ।" />
+<title>Mahim's Ledger — মাহিম'স লেজার | ব্যক্তিগত হিসাব-খাতা</title>
+<meta name="description" content="Mahim's Ledger (মাহিম'স লেজার) — ব্যক্তিগত খরচ, পাই-পাওনা, ট্যুর হিসাব, বাজেট ও দৈনিক খরচের লিমিট ট্র্যাক করার জন্য একটি প্রিমিয়াম বাংলা ফিনান্স ওয়েব অ্যাপ। Personal finance and expense tracker app in Bengali." />
+<meta name="keywords" content="Mahim's Ledger, Mahims Ledger, Mahim Ledger, মাহিম'স লেজার, মাহিমস লেজার, মাহিম লেজার, personal finance app bangla, expense tracker bangla, bangla hisab app, ব্যক্তিগত হিসাব অ্যাপ, খরচ ট্র্যাকার বাংলা" />
 <meta name="robots" content="index, follow" />
+<meta name="author" content="মো. মিনহাজুর রহমান মাহিম" />
+<link rel="canonical" href="https://minhazurrahmanmahim.github.io/ledger/" />
+
+<!-- Open Graph / সোশ্যাল শেয়ার ও কিছু সার্চ ইঞ্জিনের জন্য -->
+<meta property="og:title" content="Mahim's Ledger — মাহিম'স লেজার" />
+<meta property="og:description" content="ব্যক্তিগত খরচ, পাই-পাওনা, ট্যুর হিসাব ও বাজেট ব্যবস্থাপনার জন্য একটি প্রিমিয়াম বাংলা ফিনান্স অ্যাপ।" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://minhazurrahmanmahim.github.io/ledger/" />
+<meta property="og:image" content="https://minhazurrahmanmahim.github.io/ledger/icons/icon-512.png" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Mahim's Ledger",
+  "alternateName": ["মাহিম'স লেজার", "Mahims Ledger", "Mahim Ledger", "মাহিমস লেজার", "মাহিম লেজার"],
+  "applicationCategory": "FinanceApplication",
+  "operatingSystem": "Any",
+  "description": "ব্যক্তিগত খরচ, পাই-পাওনা, ট্যুর হিসাব, বাজেট ও দৈনিক খরচের লিমিট ট্র্যাক করার জন্য একটি প্রিমিয়াম বাংলা ফিনান্স ওয়েব অ্যাপ।",
+  "url": "https://minhazurrahmanmahim.github.io/ledger/",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "BDT" }
+}
+</script>
 
 <!-- PWA — হোম স্ক্রিনে অ্যাপ হিসেবে ইনস্টল করার জন্য -->
 <link rel="manifest" href="manifest.json" />
@@ -45,6 +69,14 @@
     <img src="icons/icon-192.png" alt="Mahim's Ledger" class="auth-logo" />
     <h1 class="auth-title">Mahim's Ledger</h1>
     <p class="auth-subtitle">ক্লাউড সিঙ্ক চালু করতে লগইন করুন — যেকোনো ডিভাইস থেকে একই হিসাব দেখতে ও আপডেট করতে পারবেন।</p>
+
+    <button type="button" id="mobileInstallBtn" class="mobile-install-btn" style="display:none;">
+      <i data-lucide="download"></i>
+      <span>মোবাইলে অ্যাপ হিসেবে ইনস্টল করুন</span>
+    </button>
+    <p id="iosInstallHint" class="ios-install-hint" style="display:none;">
+      <i data-lucide="share"></i> Safari-তে নিচের Share বাটনে চেপে "Add to Home Screen" নির্বাচন করুন।
+    </p>
 
     <div class="form-grid">
       <div class="form-row">

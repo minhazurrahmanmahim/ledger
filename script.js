@@ -209,6 +209,51 @@ function translateAuthError(err){
   return map[err.code] || ('সমস্যা হয়েছে: ' + err.message);
 }
 
+/* ===================== মোবাইলে অ্যাপ ইনস্টল বাটন ===================== */
+let deferredInstallPrompt = null;
+
+function isMobileDevice(){
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
+}
+function isIOSDevice(){
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+function isAlreadyInstalled(){
+  return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+}
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = document.getElementById('mobileInstallBtn');
+  if(btn && isMobileDevice() && !isAlreadyInstalled()){
+    btn.style.display = 'flex';
+  }
+});
+
+function setupMobileInstallUI(){
+  const btn = document.getElementById('mobileInstallBtn');
+  const iosHint = document.getElementById('iosInstallHint');
+  if(!btn || isAlreadyInstalled() || !isMobileDevice()) return;
+
+  if(isIOSDevice()){
+    // iOS Safari beforeinstallprompt সাপোর্ট করে না — তাই ম্যানুয়াল নির্দেশনা দেখানো হয়
+    iosHint.style.display = 'flex';
+    refreshIcons();
+  }
+  // অ্যান্ড্রয়েড/Chrome: beforeinstallprompt ইভেন্ট এলে বাটন দেখানো হবে (উপরে হ্যান্ডলার আছে)
+
+  btn.addEventListener('click', async () => {
+    if(!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const choice = await deferredInstallPrompt.userChoice;
+    if(choice.outcome === 'accepted'){
+      btn.style.display = 'none';
+    }
+    deferredInstallPrompt = null;
+  });
+}
+
 function setupAuthUI(){
   const overlay        = document.getElementById('authOverlay');
   const emailInput     = document.getElementById('authEmail');
@@ -697,7 +742,13 @@ entryTimeUnknown.addEventListener('change', () => {
 });
 
 function populateCategorySelect(){
+  const prevValue = entryCategorySel.value;
   entryCategorySel.innerHTML = state.categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  // আগে যে ক্যাটাগরি সিলেক্ট করা ছিল, সেটা এখনো তালিকায় থাকলে আবার সিলেক্ট করে দেওয়া হচ্ছে
+  // (নতুন ক্যাটাগরি যুক্ত হওয়ার পর, বা যেকোনো renderAll()-এর পরে যাতে সিলেকশন হারিয়ে না যায়)
+  if(prevValue && state.categories.includes(prevValue)){
+    entryCategorySel.value = prevValue;
+  }
 }
 function populateTourSelect(){
   if(state.tours.length === 0){
@@ -2724,6 +2775,7 @@ function renderAll(){
 function init(){
   // লগইন/সাইনআপ চালু করা (অন্য কোনো অংশে এরর হলেও এটি কাজ করবে)
   setupAuthUI();
+  setupMobileInstallUI();
 
   // হোম স্ক্রিন শর্টকাট (#add-entry, #dashboard ইত্যাদি) থেকে সরাসরি পেজ খোলা
   const initialPage = (location.hash || '').replace('#', '') || 'dashboard';

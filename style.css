@@ -844,3 +844,22 @@ tr.over-limit-row td{ background: var(--expense-bg) !important; }
   color: var(--text); cursor:pointer;
 }
 .archive-filter-row select:focus{ outline:none; border-color: var(--accent); }
+
+/* ===================== মোবাইল ইনস্টল বাটন (লগইন পেজ) ===================== */
+.mobile-install-btn{
+  width:100%; display:flex; align-items:center; justify-content:center; gap:.55rem;
+  background: linear-gradient(145deg, var(--accent), #c9a567);
+  color: var(--primary); font-weight:700; font-size:.9rem;
+  border:none; border-radius:10px; padding:.7rem 1rem; cursor:pointer;
+  margin: 1rem 0 .3rem; transition: transform .15s ease, box-shadow .15s ease;
+  box-shadow: 0 4px 14px rgba(176,141,79,.3);
+}
+.mobile-install-btn:hover{ transform: translateY(-1px); box-shadow: 0 6px 18px rgba(176,141,79,.4); }
+.mobile-install-btn:active{ transform: scale(.97); }
+.mobile-install-btn i{ width:18px; height:18px; }
+.ios-install-hint{
+  display:flex; align-items:center; gap:.5rem; justify-content:center;
+  font-size:.78rem; color: var(--muted); margin: 1rem 0 .3rem;
+  background: var(--surface-alt); border:1px solid var(--border); border-radius:10px; padding:.6rem .8rem;
+}
+.ios-install-hint i{ width:15px; height:15px; flex-shrink:0; }
