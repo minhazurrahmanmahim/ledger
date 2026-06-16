@@ -455,6 +455,25 @@ function entryTitle(entry){
   if(entry.kind === 'payable') return 'দেব: ' + (entry.person || 'অজানা');
   return '';
 }
+/* এন্ট্রির পাশে কোন কোন হিসাব থেকে বাদ আছে তা ছোট ব্যাজে দেখানো */
+function exclusionBadges(e){
+  const labels = [];
+  if(e.excludeFromDailyTotal && e.excludeFromDailyLimit){
+    labels.push('দৈনিক হিসাবের বাইরে');
+  } else {
+    if(e.excludeFromDailyTotal) labels.push('দৈনিক মোটের বাইরে');
+    if(e.excludeFromDailyLimit) labels.push('দৈনিক লিমিটের বাইরে');
+  }
+  if(e.excludeFromMonthlyTotal && e.excludeFromMonthlyLimit){
+    labels.push('মাসিক হিসাবের বাইরে');
+  } else {
+    if(e.excludeFromMonthlyTotal) labels.push('মাসিক মোটের বাইরে');
+    if(e.excludeFromMonthlyLimit) labels.push('মাসিক বাজেটের বাইরে');
+  }
+  if(labels.length === 0) return '';
+  return labels.map(l => ` <span class="badge-mini">${l}</span>`).join('');
+}
+
 function entryAmountClass(entry){
   if(entry.kind === 'expense') return 'expense';
   if(entry.kind === 'receivable') return 'income';
@@ -481,10 +500,31 @@ function getCurrentDailyLimit(){
   return getDailyLimitForDate(todayStr());
 }
 
-// নির্দিষ্ট তারিখের মোট খরচ
+// নির্দিষ্ট তারিখের মোট খরচ (দৈনন্দিন "মোট খরচ" হিসেবে দেখানোর জন্য — excludeFromDailyTotal বাদ)
 function getDayExpenseTotal(dateStr){
   return state.entries
-    .filter(e => e.kind === 'expense' && e.date === dateStr && !e.excludeFromDaily)
+    .filter(e => e.kind === 'expense' && e.date === dateStr && !e.excludeFromDailyTotal)
+    .reduce((s,e) => s + e.amount, 0);
+}
+
+// নির্দিষ্ট তারিখের খরচ — দৈনিক লিমিটের সাথে তুলনার জন্য (excludeFromDailyLimit বাদ)
+function getDayExpenseForLimit(dateStr){
+  return state.entries
+    .filter(e => e.kind === 'expense' && e.date === dateStr && !e.excludeFromDailyLimit)
+    .reduce((s,e) => s + e.amount, 0);
+}
+
+// নির্দিষ্ট মাসের (YYYY-MM) মোট খরচ — "মাসের মোট খরচ" হিসেবে দেখানোর জন্য (excludeFromMonthlyTotal বাদ)
+function getMonthExpenseTotal(yearMonth){
+  return state.entries
+    .filter(e => e.kind === 'expense' && e.date && e.date.slice(0,7) === yearMonth && !e.excludeFromMonthlyTotal)
+    .reduce((s,e) => s + e.amount, 0);
+}
+
+// নির্দিষ্ট মাসের খরচ — মাসিক বাজেট/লিমিটের সাথে তুলনার জন্য (excludeFromMonthlyLimit বাদ)
+function getMonthExpenseForLimit(yearMonth){
+  return state.entries
+    .filter(e => e.kind === 'expense' && e.date && e.date.slice(0,7) === yearMonth && !e.excludeFromMonthlyLimit)
     .reduce((s,e) => s + e.amount, 0);
 }
 
@@ -493,7 +533,7 @@ function isDayOverLimit(dateStr){
   const limit = getDailyLimitForDate(dateStr);
   if(!limit || limit <= 0) return false;
   if(state.dayExceptions && state.dayExceptions[dateStr]) return false;
-  return getDayExpenseTotal(dateStr) > limit;
+  return getDayExpenseForLimit(dateStr) > limit;
 }
 
 function tomorrowStr(){
@@ -689,8 +729,11 @@ const categoryRow      = document.getElementById('categoryRow');
 const personRow        = document.getElementById('personRow');
 const entryFormTitle   = document.getElementById('entryFormTitle');
 const tourCheckboxRow  = entryIsTour.closest('.form-row');
-const excludeFromDailyRow   = document.getElementById('excludeFromDailyRow');
-const entryExcludeFromDaily = document.getElementById('entryExcludeFromDaily');
+const excludeOptionsRow      = document.getElementById('excludeOptionsRow');
+const entryExcludeDailyTotal   = document.getElementById('entryExcludeDailyTotal');
+const entryExcludeDailyLimit   = document.getElementById('entryExcludeDailyLimit');
+const entryExcludeMonthlyTotal = document.getElementById('entryExcludeMonthlyTotal');
+const entryExcludeMonthlyLimit = document.getElementById('entryExcludeMonthlyLimit');
 
 document.querySelectorAll('#entryTypeControl .seg').forEach(seg => {
   seg.addEventListener('click', () => {
@@ -706,16 +749,19 @@ function updateEntryFormForType(){
     categoryRow.style.display = '';
     personRow.style.display = 'none';
     tourCheckboxRow.style.display = '';
-    excludeFromDailyRow.style.display = '';
+    excludeOptionsRow.style.display = '';
     entryCategorySel.required = true;
     entryPersonInput.required = false;
   } else {
     categoryRow.style.display = 'none';
     personRow.style.display = '';
     tourCheckboxRow.style.display = 'none';
-    excludeFromDailyRow.style.display = 'none';
+    excludeOptionsRow.style.display = 'none';
     entryIsTour.checked = false;
-    entryExcludeFromDaily.checked = false;
+    entryExcludeDailyTotal.checked = false;
+    entryExcludeDailyLimit.checked = false;
+    entryExcludeMonthlyTotal.checked = false;
+    entryExcludeMonthlyLimit.checked = false;
     tourFields.style.display = 'none';
     entryCategorySel.required = false;
     entryPersonInput.required = true;
@@ -724,9 +770,12 @@ function updateEntryFormForType(){
 
 entryIsTour.addEventListener('change', () => {
   tourFields.style.display = entryIsTour.checked ? '' : 'none';
-  // ট্যুরের খরচ সাধারণত দৈনন্দিন বাজেটে ধরা হয় না — তাই ডিফল্টভাবে টিক হয়ে যাবে,
-  // চাইলে ব্যবহারকারী আবার আনচেক করতে পারবেন
-  if(entryIsTour.checked) entryExcludeFromDaily.checked = true;
+  // ট্যুরের খরচ সাধারণত দৈনন্দিন/মাসিক বাজেটে আলাদাভাবে ধরা হয় না —
+  // তাই ডিফল্টভাবে দৈনিক মোট ও লিমিট থেকে বাদ রাখা টিক হয়ে যাবে, চাইলে পরিবর্তন করা যাবে
+  if(entryIsTour.checked){
+    entryExcludeDailyTotal.checked = true;
+    entryExcludeDailyLimit.checked = true;
+  }
 });
 
 entryTimeUnknown.addEventListener('change', () => {
@@ -1109,7 +1158,10 @@ entryForm.addEventListener('submit', e => {
     isTour: currentEntryType === 'expense' && entryIsTour.checked,
     tourId: (currentEntryType === 'expense' && entryIsTour.checked) ? entryTourSel.value : null,
     tourCategory: (currentEntryType === 'expense' && entryIsTour.checked) ? entryTourCatSel.value : null,
-    excludeFromDaily: currentEntryType === 'expense' && entryExcludeFromDaily.checked,
+    excludeFromDailyTotal: currentEntryType === 'expense' && entryExcludeDailyTotal.checked,
+    excludeFromDailyLimit: currentEntryType === 'expense' && entryExcludeDailyLimit.checked,
+    excludeFromMonthlyTotal: currentEntryType === 'expense' && entryExcludeMonthlyTotal.checked,
+    excludeFromMonthlyLimit: currentEntryType === 'expense' && entryExcludeMonthlyLimit.checked,
   };
 
   if(editingId){
@@ -1177,7 +1229,10 @@ function editEntry(id){
   }
   entryIsTour.checked = !!entry.isTour;
   tourFields.style.display = entry.isTour ? '' : 'none';
-  entryExcludeFromDaily.checked = !!entry.excludeFromDaily;
+  entryExcludeDailyTotal.checked = !!entry.excludeFromDailyTotal;
+  entryExcludeDailyLimit.checked = !!entry.excludeFromDailyLimit;
+  entryExcludeMonthlyTotal.checked = !!entry.excludeFromMonthlyTotal;
+  entryExcludeMonthlyLimit.checked = !!entry.excludeFromMonthlyLimit;
   if(entry.isTour){
     entryTourSel.value = entry.tourId || '';
     entryTourCatSel.value = entry.tourCategory || 'ভাড়া';
@@ -1223,14 +1278,17 @@ function renderDashboard(){
 
   const today = todayStr();
   const now = new Date();
+  const thisMonth = today.slice(0,7);
 
-  const todayExpense = state.entries
-    .filter(e => e.kind === 'expense' && e.date === today)
-    .reduce((s,e) => s + e.amount, 0);
+  // "আজকের মোট খরচ" স্ট্যাট কার্ডে — দৈনিক মোট থেকে এক্সক্লুড করা এন্ট্রি বাদে
+  const todayExpense = getDayExpenseTotal(today);
+  // দৈনিক লিমিটের সাথে তুলনার জন্য আলাদা হিসাব (ভিন্ন এক্সক্লুড ফ্ল্যাগ)
+  const todayExpenseForLimit = getDayExpenseForLimit(today);
 
-  const monthExpense = state.entries
-    .filter(e => e.kind === 'expense' && e.date && e.date.slice(0,7) === today.slice(0,7))
-    .reduce((s,e) => s + e.amount, 0);
+  // "এই মাসের মোট খরচ" স্ট্যাট কার্ডে
+  const monthExpense = getMonthExpenseTotal(thisMonth);
+  // মাসিক বাজেট/লিমিটের সাথে তুলনার জন্য আলাদা হিসাব
+  const monthExpenseForLimit = getMonthExpenseForLimit(thisMonth);
 
   const totalReceivable = state.entries
     .filter(e => e.kind === 'receivable')
@@ -1247,7 +1305,7 @@ function renderDashboard(){
   document.getElementById('statTotalReceivable').textContent = taka(totalReceivable);
   document.getElementById('statTotalPayable').textContent = taka(totalPayable);
 
-  // মাসিক বাজেট
+  // মাসিক বাজেট (মাসিক লিমিট-নির্দিষ্ট হিসাব ব্যবহার করা হচ্ছে)
   const budget = state.settings.monthlyBudget || 0;
   const budgetEmpty = document.getElementById('budgetEmptyState');
   const budgetContent = document.getElementById('budgetContent');
@@ -1257,14 +1315,14 @@ function renderDashboard(){
   } else {
     budgetEmpty.style.display = 'none';
     budgetContent.style.display = 'block';
-    const pct = Math.min(100, (monthExpense / budget) * 100);
+    const pct = Math.min(100, (monthExpenseForLimit / budget) * 100);
     const fill = document.getElementById('budgetProgressFill');
     fill.style.width = pct + '%';
-    fill.classList.toggle('over-budget', monthExpense > budget);
-    document.getElementById('budgetSpentLabel').textContent = `খরচ হয়েছে: ${taka(monthExpense)}`;
+    fill.classList.toggle('over-budget', monthExpenseForLimit > budget);
+    document.getElementById('budgetSpentLabel').textContent = `খরচ হয়েছে: ${taka(monthExpenseForLimit)}`;
     document.getElementById('budgetTotalLabel').textContent = `বাজেট: ${taka(budget)}`;
     const remainText = document.getElementById('budgetRemainingText');
-    const remain = budget - monthExpense;
+    const remain = budget - monthExpenseForLimit;
     if(remain >= 0){
       remainText.textContent = `অবশিষ্ট আছে: ${taka(remain)} (এই মাসের জন্য)`;
       remainText.className = 'budget-remaining ok';
@@ -1274,7 +1332,7 @@ function renderDashboard(){
     }
   }
 
-  // দৈনিক খরচের লিমিট
+  // দৈনিক খরচের লিমিট (দৈনিক লিমিট-নির্দিষ্ট হিসাব ব্যবহার করা হচ্ছে)
   const dailyLimit = getCurrentDailyLimit();
   const dailyLimitEmpty = document.getElementById('dailyLimitEmptyState');
   const dailyLimitContent = document.getElementById('dailyLimitContent');
@@ -1284,14 +1342,14 @@ function renderDashboard(){
   } else {
     dailyLimitEmpty.style.display = 'none';
     dailyLimitContent.style.display = 'block';
-    const pctD = Math.min(100, (todayExpense / dailyLimit) * 100);
+    const pctD = Math.min(100, (todayExpenseForLimit / dailyLimit) * 100);
     const fillD = document.getElementById('dailyLimitProgressFill');
     fillD.style.width = pctD + '%';
-    fillD.classList.toggle('over-budget', todayExpense > dailyLimit);
-    document.getElementById('dailyLimitSpentLabel').textContent = `আজ খরচ হয়েছে: ${taka(todayExpense)}`;
+    fillD.classList.toggle('over-budget', todayExpenseForLimit > dailyLimit);
+    document.getElementById('dailyLimitSpentLabel').textContent = `আজ খরচ হয়েছে: ${taka(todayExpenseForLimit)}`;
     document.getElementById('dailyLimitTotalLabel').textContent = `লিমিট: ${taka(dailyLimit)}`;
     const remainTextD = document.getElementById('dailyLimitRemainingText');
-    const remainD = dailyLimit - todayExpense;
+    const remainD = dailyLimit - todayExpenseForLimit;
     if(remainD >= 0){
       remainTextD.textContent = `আজকের জন্য বাকি আছে: ${taka(remainD)}`;
       remainTextD.className = 'budget-remaining ok';
@@ -1356,7 +1414,7 @@ function renderExpenseTable(){
     <tr class="${isDayOverLimit(e.date) ? 'over-limit-row' : ''}">
       <td>${formatDateDMY(e.date)}</td>
       <td>${formatTimeBn(e.time)}</td>
-      <td>${escapeHtml(e.category || '')}${e.isTour ? ` <span class="badge income" style="font-size:.65rem;padding:.1rem .5rem;">ট্যুর</span>` : ''}${e.excludeFromDaily ? ` <span class="badge-mini">দৈনন্দিনের বাইরে</span>` : ''}</td>
+      <td>${escapeHtml(e.category || '')}${e.isTour ? ` <span class="badge income" style="font-size:.65rem;padding:.1rem .5rem;">ট্যুর</span>` : ''}${exclusionBadges(e)}</td>
       <td>${escapeHtml(e.note || '')}</td>
       <td class="num expense">${taka(e.amount)}</td>
       <td>
@@ -2457,13 +2515,15 @@ function renderDayDetail(dateStr){
   title.innerHTML = `<i data-lucide="calendar-check"></i> ${formatFullDateBn(dateObj)}`;
 
   const total = getDayExpenseTotal(dateStr);
+  const totalForLimit = getDayExpenseForLimit(dateStr);
   const limit = getDailyLimitForDate(dateStr);
   const over = isDayOverLimit(dateStr);
 
   let summaryHtml = `<span>মোট খরচ: <strong class="${over ? 'over':''}">${taka(total)}</strong></span>`;
   if(limit > 0){
     summaryHtml += `<span>দৈনিক লিমিট: <strong>${taka(limit)}</strong></span>`;
-    const diff = limit - total;
+    summaryHtml += `<span>লিমিট-যোগ্য খরচ: <strong>${taka(totalForLimit)}</strong></span>`;
+    const diff = limit - totalForLimit;
     if(diff >= 0){
       summaryHtml += `<span>বাকি আছে: <strong>${taka(diff)}</strong></span>`;
     } else {
@@ -2483,7 +2543,7 @@ function renderDayDetail(dateStr){
     list.innerHTML = dayEntries.map(e => `
       <div class="entry-row">
         <div class="entry-main">
-          <span class="entry-title">${escapeHtml(entryTitle(e))}${e.excludeFromDaily ? ` <span class="badge-mini">দৈনন্দিনের বাইরে</span>` : ''}</span>
+          <span class="entry-title">${escapeHtml(entryTitle(e))}${exclusionBadges(e)}</span>
           <span class="entry-sub">${entryMetaLine(e)}</span>
         </div>
         <span class="entry-amount ${entryAmountClass(e)}">${taka(e.amount)}</span>

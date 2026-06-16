@@ -863,3 +863,18 @@ tr.over-limit-row td{ background: var(--expense-bg) !important; }
   background: var(--surface-alt); border:1px solid var(--border); border-radius:10px; padding:.6rem .8rem;
 }
 .ios-install-hint i{ width:15px; height:15px; flex-shrink:0; }
+
+/* ===================== এক্সক্লুড অপশন গ্রিড ===================== */
+.exclude-options-label{
+  font-size:.8rem; font-weight:600; color: var(--primary-soft); display:block; margin-bottom:.5rem;
+}
+.exclude-options-grid{
+  display:grid; grid-template-columns: repeat(2, 1fr); gap:.5rem .9rem;
+  padding:.8rem .9rem; border:1px dashed var(--border); border-radius:10px;
+  background: var(--surface-alt);
+}
+.exclude-options-grid .checkbox-label{ font-size:.83rem; font-weight:500; }
+
+@media (max-width: 480px){
+  .exclude-options-grid{ grid-template-columns: 1fr; }
+}

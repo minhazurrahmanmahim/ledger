@@ -2,7 +2,7 @@
 <html lang="bn">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Mahim's Ledger — মাহিম'স লেজার | ব্যক্তিগত হিসাব-খাতা</title>
 <meta name="description" content="Mahim's Ledger (মাহিম'স লেজার) — ব্যক্তিগত খরচ, পাই-পাওনা, ট্যুর হিসাব, বাজেট ও দৈনিক খরচের লিমিট ট্র্যাক করার জন্য একটি প্রিমিয়াম বাংলা ফিনান্স ওয়েব অ্যাপ। Personal finance and expense tracker app in Bengali." />
 <meta name="keywords" content="Mahim's Ledger, Mahims Ledger, Mahim Ledger, মাহিম'স লেজার, মাহিমস লেজার, মাহিম লেজার, personal finance app bangla, expense tracker bangla, bangla hisab app, ব্যক্তিগত হিসাব অ্যাপ, খরচ ট্র্যাকার বাংলা" />
@@ -347,11 +347,26 @@
                   <span>এটি একটি ট্যুর সম্পর্কিত খরচ</span>
                 </label>
               </div>
-              <div class="form-row checkbox-row" id="excludeFromDailyRow" style="display:none;">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="entryExcludeFromDaily" />
-                  <span>এই খরচ "দৈনন্দিন খরচ"-এর মোট/লিমিটে যুক্ত হবে না</span>
-                </label>
+              <div class="form-row" id="excludeOptionsRow" style="display:none;">
+                <label class="exclude-options-label">এই খরচ যেখানে যুক্ত হবে না (ঐচ্ছিক)</label>
+                <div class="exclude-options-grid">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="entryExcludeDailyTotal" />
+                    <span>দৈনিক মোট খরচে</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="entryExcludeDailyLimit" />
+                    <span>দৈনিক লিমিটে</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="entryExcludeMonthlyTotal" />
+                    <span>মাসিক মোট খরচে</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="entryExcludeMonthlyLimit" />
+                    <span>মাসিক বাজেট/লিমিটে</span>
+                  </label>
+                </div>
               </div>
             </div>
 
