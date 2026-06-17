@@ -562,21 +562,72 @@ function currentLimitDisplayText(){
 // এন্ট্রি ফর্মের নিচে সেই তারিখের লিমিট-স্ট্যাটাস দেখানো (এন্ট্রি যুক্ত/সম্পাদনার পর)
 function updateDailyLimitStatus(dateStr){
   const statusEl = document.getElementById('dailyLimitStatus');
-  const limit = getDailyLimitForDate(dateStr);
-  if(!limit || limit <= 0){
-    statusEl.style.display = 'none';
-    return;
-  }
-  const total = getDayExpenseTotal(dateStr);
-  const remaining = limit - total;
-  const dateLabel = dateStr === todayStr() ? 'আজকের' : `${formatDateDMY(dateStr)} তারিখের`;
-  if(remaining >= 0){
-    statusEl.className = 'daily-limit-status';
-    statusEl.innerHTML = `<i data-lucide="gauge"></i> ${dateLabel} লিমিট ${taka(limit)} এর মধ্যে এখনো খরচ করা যাবে: <strong>${taka(remaining)}</strong>`;
+  const yearMonth = dateStr.slice(0,7);
+  const dateLabel = dateStr === todayStr() ? 'আজ' : formatDateDMY(dateStr);
+
+  const dailyLimit  = getDailyLimitForDate(dateStr);
+  const dailyTotal  = getDayExpenseTotal(dateStr);
+  const dailyForLimit = getDayExpenseForLimit(dateStr);
+
+  const monthlyBudget = state.settings.monthlyBudget || 0;
+  const monthlyTotal  = getMonthExpenseTotal(yearMonth);
+  const monthlyForLimit = getMonthExpenseForLimit(yearMonth);
+
+  let anyOverLimit = false;
+  const rows = [];
+
+  // ১. দৈনিক মোট খরচ (লিমিটের সাথে সম্পর্ক নেই, শুধু তথ্য)
+  rows.push({
+    label: `${dateLabel} মোট খরচ`,
+    text: taka(dailyTotal),
+    over: false
+  });
+
+  // ২. দৈনিক লিমিট
+  if(dailyLimit > 0){
+    const remain = dailyLimit - dailyForLimit;
+    if(remain >= 0){
+      rows.push({ label: `${dateLabel} লিমিট ${taka(dailyLimit)}-এর মধ্যে বাকি আছে`, text: taka(remain), over: false });
+    } else {
+      rows.push({ label: `${dateLabel} লিমিট ${taka(dailyLimit)} অতিক্রম হয়েছে`, text: taka(Math.abs(remain)), over: true });
+      anyOverLimit = true;
+    }
   } else {
-    statusEl.className = 'daily-limit-status over';
-    statusEl.innerHTML = `<i data-lucide="alert-triangle"></i> ${dateLabel} লিমিট ${taka(limit)} অতিক্রম হয়ে গেছে! অতিরিক্ত খরচ হয়েছে: <strong>${taka(Math.abs(remaining))}</strong>`;
+    rows.push({ label: 'দৈনিক লিমিট', text: 'নির্ধারিত নেই', over: false, muted: true });
   }
+
+  // ৩. মাসিক মোট খরচ
+  rows.push({
+    label: 'এই মাসের মোট খরচ',
+    text: taka(monthlyTotal),
+    over: false
+  });
+
+  // ৪. মাসিক বাজেট
+  if(monthlyBudget > 0){
+    const remainM = monthlyBudget - monthlyForLimit;
+    if(remainM >= 0){
+      rows.push({ label: `মাসিক বাজেট ${taka(monthlyBudget)}-এর মধ্যে বাকি আছে`, text: taka(remainM), over: false });
+    } else {
+      rows.push({ label: `মাসিক বাজেট ${taka(monthlyBudget)} অতিক্রম হয়েছে`, text: taka(Math.abs(remainM)), over: true });
+      anyOverLimit = true;
+    }
+  } else {
+    rows.push({ label: 'মাসিক বাজেট', text: 'নির্ধারিত নেই', over: false, muted: true });
+  }
+
+  statusEl.className = 'daily-limit-status' + (anyOverLimit ? ' over' : '');
+  statusEl.innerHTML = `
+    <div class="limit-status-head"><i data-lucide="${anyOverLimit ? 'alert-triangle' : 'gauge'}"></i> এই এন্ট্রির পরে হিসাব</div>
+    <div class="limit-status-grid">
+      ${rows.map(r => `
+        <div class="limit-status-row${r.over ? ' over' : ''}${r.muted ? ' muted' : ''}">
+          <span class="limit-status-label">${r.label}</span>
+          <span class="limit-status-value">${r.text}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
   statusEl.style.display = 'block';
   refreshIcons();
 }

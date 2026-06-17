@@ -630,11 +630,28 @@ textarea{ resize: vertical; }
 .daily-limit-box .form-row{ margin: 1rem 0; text-align:left; }
 .daily-limit-actions{ flex-wrap:wrap; }
 .daily-limit-status{
-  margin-top: 1rem; padding: .8rem 1rem; border-radius:10px; font-size:.88rem;
+  margin-top: 1rem; padding: .9rem 1rem; border-radius:10px; font-size:.88rem;
   background: var(--accent-soft); border: 1px solid rgba(176,141,79,.3); color: var(--primary-soft);
   animation: fadeIn .3s ease;
 }
-.daily-limit-status.over{ background: var(--expense-bg); border-color: rgba(124,59,59,.3); color: var(--expense); font-weight:600; }
+.daily-limit-status.over{ border-color: rgba(124,59,59,.35); }
+.limit-status-head{
+  display:flex; align-items:center; gap:.45rem; font-weight:700; margin-bottom:.6rem;
+  font-size:.85rem; color: var(--text);
+}
+.limit-status-head i{ width:16px; height:16px; color: var(--accent); flex-shrink:0; }
+.daily-limit-status.over .limit-status-head i{ color: var(--expense); }
+.limit-status-grid{ display:flex; flex-direction:column; gap:.4rem; }
+.limit-status-row{
+  display:flex; align-items:center; justify-content:space-between; gap:.6rem;
+  padding:.45rem .65rem; border-radius:7px; background: var(--surface);
+  border:1px solid var(--border); font-size:.82rem;
+}
+.limit-status-label{ color: var(--muted); }
+.limit-status-value{ font-family: var(--font-display); font-weight:700; color: var(--income); flex-shrink:0; }
+.limit-status-row.over .limit-status-value{ color: var(--expense); }
+.limit-status-row.over{ border-color: rgba(124,59,59,.3); background: var(--expense-bg); }
+.limit-status-row.muted .limit-status-value{ color: var(--muted); font-weight:500; }
 
 /* ===================== ক্যালেন্ডার ===================== */
 .calendar-nav{ display:flex; align-items:center; gap:.7rem; font-weight:700; font-family: var(--font-display); font-size:.95rem; }
