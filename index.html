@@ -51,6 +51,9 @@
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
 
+<!-- SheetJS (Excel এক্সপোর্টের জন্য) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+
 <!-- Lucide আইকন (পিন করা ভার্সন, দ্রুত ও স্থিতিশীল CDN) -->
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js" defer></script>
 
@@ -62,6 +65,19 @@
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
+<!-- ============ পিন লক ওভারলে ============ -->
+<div id="pinLockOverlay" class="auth-overlay" style="display:none;">
+  <div class="auth-card">
+    <img src="icons/icon-192.png" alt="Mahim's Ledger" class="auth-logo" />
+    <h1 class="auth-title">পিন দিয়ে আনলক করুন</h1>
+    <p class="auth-subtitle">অ্যাপটি সুরক্ষিত — চালিয়ে যেতে আপনার ৪-সংখ্যার পিন দিন।</p>
+    <input type="password" id="pinUnlockInput" maxlength="4" inputmode="numeric" pattern="[0-9]*"
+           placeholder="••••" class="pin-unlock-input" autocomplete="off" />
+    <p id="pinUnlockError" class="auth-error" style="display:none;"></p>
+    <button type="button" class="btn btn-primary" id="pinUnlockBtn" style="width:100%;">আনলক করুন</button>
+  </div>
+</div>
 
 <!-- ============ লগইন / সাইন-আপ ওভারলে ============ -->
 <div id="authOverlay" class="auth-overlay">
@@ -146,6 +162,9 @@
       <button class="nav-item" data-page="notes">
         <i data-lucide="notebook-pen"></i><span>নোটস</span>
       </button>
+      <button class="nav-item" data-page="guide">
+        <i data-lucide="book-open"></i><span>ব্যবহার-বিধি</span>
+      </button>
       <button class="nav-item" data-page="settings">
         <i data-lucide="settings"></i><span>সেটিংস</span>
       </button>
@@ -178,6 +197,9 @@
       <button class="bell-btn" id="searchBtn" title="সার্চ করুন">
         <i data-lucide="search"></i>
       </button>
+      <button class="bell-btn" id="themeToggleBtn" title="ডার্ক/লাইট মোড পরিবর্তন">
+        <i data-lucide="moon"></i>
+      </button>
       <button class="bell-btn" id="bellBtn" title="রিমাইন্ডার সেটিংস">
         <i data-lucide="bell"></i>
       </button>
@@ -192,6 +214,7 @@
             <p class="eyebrow">শুভেচ্ছা,</p>
             <h2 class="display-name" id="dashName">মো. মিনহাজুর রহমান মাহিম</h2>
           </div>
+          <button type="button" class="btn btn-ghost" id="shareSummaryBtn"><i data-lucide="image-down"></i> সারাংশ শেয়ার করুন</button>
         </div>
 
         <div class="stat-grid">
@@ -227,6 +250,27 @@
             </div>
             <i data-lucide="chevron-right" class="stat-arrow"></i>
           </div>
+          <div class="stat-card clickable" data-page="reports" title="আয়ের বিস্তারিত দেখুন">
+            <div class="stat-icon income"><i data-lucide="trending-up"></i></div>
+            <div>
+              <p class="stat-label">এই মাসের মোট আয়</p>
+              <p class="stat-value income" id="statMonthIncome">৳ ০</p>
+            </div>
+            <i data-lucide="chevron-right" class="stat-arrow"></i>
+          </div>
+        </div>
+
+        <div class="ledger-card insights-card">
+          <div class="card-head"><h3><i data-lucide="lightbulb"></i> ইনসাইটস</h3></div>
+          <div id="insightsList" class="insights-list"></div>
+        </div>
+
+        <div class="ledger-card" id="dashboardGoalsCard" style="display:none;">
+          <div class="card-head">
+            <h3><i data-lucide="piggy-bank"></i> সঞ্চয় লক্ষ্য</h3>
+            <button class="link-btn" data-page="settings">পরিচালনা করুন</button>
+          </div>
+          <div id="dashboardGoalsList" class="goals-list"></div>
         </div>
 
         <div class="dashboard-grid">
@@ -294,6 +338,7 @@
             <h3 id="entryFormTitle"><i data-lucide="pencil-line"></i> নতুন এন্ট্রি যোগ করুন</h3>
             <button type="button" class="btn btn-ghost" id="openDailyLimitBtnFromEntry"><i data-lucide="gauge"></i> দৈনিক লিমিট</button>
           </div>
+          <div id="quickTemplatesRow" class="quick-templates-row" style="display:none;"></div>
           <form id="entryForm">
             <input type="hidden" id="entryId" />
 
@@ -301,6 +346,7 @@
               <label>ধরন</label>
               <div class="seg-control" id="entryTypeControl">
                 <button type="button" class="seg active" data-value="expense">খরচ</button>
+                <button type="button" class="seg" data-value="income">আয়</button>
                 <button type="button" class="seg" data-value="receivable">আমি পাবো (পাই)</button>
                 <button type="button" class="seg" data-value="payable">আমি দেব (পাওনা)</button>
               </div>
@@ -310,6 +356,10 @@
               <div class="form-row" id="categoryRow">
                 <label for="entryCategory">খাত (Category)</label>
                 <select id="entryCategory"></select>
+              </div>
+              <div class="form-row" id="incomeSourceRow" style="display:none;">
+                <label for="entryIncomeSource">আয়ের উৎস</label>
+                <select id="entryIncomeSource"></select>
               </div>
               <div class="form-row" id="personRow" style="display:none;">
                 <label for="entryPerson">ব্যক্তি (নাম লিখুন)</label>
@@ -324,6 +374,10 @@
                   <span id="linkedContactText"></span>
                   <button type="button" id="removeLinkedContactBtn" title="লিংক বাতিল করুন"><i data-lucide="x"></i></button>
                 </div>
+              </div>
+              <div class="form-row" id="dueDateRow" style="display:none;">
+                <label for="entryDueDate">ফেরত দেওয়ার/নেওয়ার তারিখ (ঐচ্ছিক — রিমাইন্ডারের জন্য)</label>
+                <input type="date" id="entryDueDate" />
               </div>
               <div class="form-row">
                 <label for="entryAmount">পরিমাণ (৳)</label>
@@ -482,6 +536,12 @@
             <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
           </div>
         </div>
+
+        <div class="ledger-card">
+          <div class="card-head"><h3><i data-lucide="target"></i> খাতভিত্তিক মাসিক বাজেট</h3></div>
+          <p class="hint-text">প্রতিটি খাতের জন্য আলাদা মাসিক বাজেট ঠিক করে রাখুন — এই মাসে কোন খাতে কত খরচ হয়েছে তা প্রোগ্রেস বারে দেখাবে।</p>
+          <div id="categoryBudgetList" class="category-budget-list"></div>
+        </div>
       </section>
 
       <!-- ================= দৈনন্দিন খরচ ================= -->
@@ -592,9 +652,18 @@
 
         <div class="ledger-card">
           <div class="card-head">
+            <h3><i data-lucide="sparkles"></i> বছরের সারসংক্ষেপ</h3>
+            <select id="annualSummaryYear"></select>
+          </div>
+          <div id="annualSummaryContent" class="annual-summary-grid"></div>
+        </div>
+
+        <div class="ledger-card">
+          <div class="card-head">
             <h3><i data-lucide="file-text"></i> বিস্তারিত স্টেটমেন্ট</h3>
             <div class="report-export-actions">
               <button class="btn btn-ghost" id="downloadCsvBtn"><i data-lucide="sheet"></i> CSV ডাউনলোড</button>
+              <button class="btn btn-ghost" id="downloadExcelBtn"><i data-lucide="file-spreadsheet"></i> Excel ডাউনলোড</button>
               <button class="btn btn-primary" id="downloadPdfBtn"><i data-lucide="printer"></i> পিডিএফ ডাউনলোড / প্রিন্ট</button>
             </div>
           </div>
@@ -604,6 +673,7 @@
               <tbody></tbody>
             </table>
           </div>
+          <div id="reportDetailedSummary"></div>
         </div>
       </section>
 
@@ -743,6 +813,24 @@
         </div>
       </section>
 
+      <!-- ================= ব্যবহার-বিধি (গাইড) ================= -->
+      <section class="page" id="guide">
+        <div class="ledger-card user-counter-card">
+          <div class="card-head"><h3><i data-lucide="users"></i> বর্তমান ব্যবহারকারী</h3></div>
+          <div class="user-counter-display">
+            <span class="user-counter-number" id="userCounterValue">…</span>
+            <span class="user-counter-label">জন ব্যবহারকারী এই অ্যাপ ব্যবহার করছেন</span>
+          </div>
+          <p class="hint-text"><i data-lucide="shield-check"></i> প্রতিটি ব্যবহারকারীর তথ্য (খরচ, পাই-পাওনা, নোট ইত্যাদি) সম্পূর্ণ আলাদা ও সুরক্ষিতভাবে সংরক্ষিত থাকে — একজন ব্যবহারকারী কখনোই অন্য কারো তথ্য দেখতে বা জানতে পারবেন না। নতুন কেউ অ্যাকাউন্ট খুললে এই সংখ্যা স্বয়ংক্রিয়ভাবে বেড়ে যাবে।</p>
+        </div>
+
+        <div class="ledger-card guide-card">
+          <div class="card-head"><h3><i data-lucide="book-open"></i> অ্যাপ ব্যবহারের সম্পূর্ণ নির্দেশনা</h3></div>
+          <input type="text" id="guideSearch" placeholder="যে বিষয়ে জানতে চান তা লিখে খুঁজুন..." class="contact-picker-search" style="margin-bottom:1.2rem;" />
+          <div id="guideContent" class="guide-content"></div>
+        </div>
+      </section>
+
       <!-- ================= সেটিংস ================= -->
       <section class="page" id="settings">
         <div class="ledger-card form-card">
@@ -778,7 +866,49 @@
               <label for="settingMonthlyBudget">মাসিক বাজেট (৳)</label>
               <input type="number" id="settingMonthlyBudget" min="0" step="1" placeholder="যেমন: ১৫০০০" />
             </div>
+            <div class="form-row">
+              <label for="settingCurrency">কারেন্সি (মুদ্রা)</label>
+              <select id="settingCurrency">
+                <option value="BDT">৳ টাকা (BDT)</option>
+                <option value="USD">$ ডলার (USD)</option>
+                <option value="EUR">€ ইউরো (EUR)</option>
+                <option value="GBP">£ পাউন্ড (GBP)</option>
+                <option value="INR">₹ রুপি (INR)</option>
+                <option value="SAR">SR সৌদি রিয়াল (SAR)</option>
+                <option value="AED">AED দিরহাম (AED)</option>
+                <option value="MYR">RM রিংগিত (MYR)</option>
+              </select>
+            </div>
           </div>
+        </div>
+
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="palette"></i> থিম রঙ</h3></div>
+          <p class="hint-text">অ্যাপের ব্রাশ/সোনালি রঙের জায়গায় পছন্দের রঙ বেছে নিন।</p>
+          <div class="theme-color-row" id="themeColorRow">
+            <button type="button" class="theme-color-swatch active" data-color="B08D4F" style="background:#B08D4F;" title="ব্রাস (ডিফল্ট)"></button>
+            <button type="button" class="theme-color-swatch" data-color="6B8E7F" style="background:#6B8E7F;" title="সি গ্রিন"></button>
+            <button type="button" class="theme-color-swatch" data-color="9C6B4F" style="background:#9C6B4F;" title="টেরাকোটা"></button>
+            <button type="button" class="theme-color-swatch" data-color="7A6FA3" style="background:#7A6FA3;" title="ল্যাভেন্ডার"></button>
+            <button type="button" class="theme-color-swatch" data-color="B0584F" style="background:#B0584F;" title="রাস্ট রেড"></button>
+            <button type="button" class="theme-color-swatch" data-color="4F7CB0" style="background:#4F7CB0;" title="স্টিল ব্লু"></button>
+          </div>
+        </div>
+
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="lock-keyhole"></i> অ্যাপ লক (পিন)</h3></div>
+          <p class="hint-text">অতিরিক্ত সুরক্ষার জন্য একটি ৪-সংখ্যার পিন সেট করুন — অ্যাপ খোলার সময় (লগইনের পরও) এই পিন চাইবে। ডিভাইসে অ্যাপ খোলা থেকে গেলেও কেউ সহজে দেখতে পারবে না।</p>
+          <div class="form-grid">
+            <div class="form-row">
+              <label for="appPinInput">৪-সংখ্যার পিন</label>
+              <input type="password" id="appPinInput" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="••••" />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="setPinBtn"><i data-lucide="check"></i> পিন সেট করুন</button>
+            <button class="btn btn-ghost" id="removePinBtn" style="display:none;">পিন বন্ধ করুন</button>
+          </div>
+          <p class="hint-text" id="pinStatusText"></p>
         </div>
 
         <div class="ledger-card form-card">
@@ -796,6 +926,104 @@
             </div>
           </div>
           <p class="hint-text"><i data-lucide="info"></i> ব্রাউজার ট্যাব খোলা থাকলে নির্ধারিত সময়ে একটি পপআপ ও (অনুমতি দেওয়া থাকলে) সিস্টেম নোটিফিকেশন আসবে — যা মনে করিয়ে দেবে আজকের সব খরচ এন্ট্রি করা হয়েছে কিনা।</p>
+        </div>
+
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="repeat"></i> রিকারিং (পুনরাবৃত্ত) এন্ট্রি</h3></div>
+          <p class="hint-text">মাসিক ভাড়া, বিল, বেতন ইত্যাদির জন্য নির্দিষ্ট তারিখে স্বয়ংক্রিয়ভাবে এন্ট্রি তৈরি হবে — প্রতি মাসে আবার নতুন করে যুক্ত করতে হবে না।</p>
+          <div class="form-grid">
+            <div class="form-row">
+              <label>ধরন</label>
+              <select id="recurringKind">
+                <option value="expense">খরচ</option>
+                <option value="income">আয়</option>
+              </select>
+            </div>
+            <div class="form-row" id="recurringCategoryRow">
+              <label for="recurringCategory">খাত</label>
+              <select id="recurringCategory"></select>
+            </div>
+            <div class="form-row" id="recurringIncomeSourceRow" style="display:none;">
+              <label for="recurringIncomeSource">আয়ের উৎস</label>
+              <select id="recurringIncomeSource"></select>
+            </div>
+            <div class="form-row">
+              <label for="recurringAmount">পরিমাণ (৳)</label>
+              <input type="number" min="0" step="0.01" id="recurringAmount" placeholder="০.০০" />
+            </div>
+            <div class="form-row">
+              <label for="recurringDay">মাসের কোন তারিখে</label>
+              <input type="number" min="1" max="28" id="recurringDay" placeholder="যেমন: ১" />
+            </div>
+            <div class="form-row">
+              <label for="recurringNote">নোট (ঐচ্ছিক)</label>
+              <input type="text" id="recurringNote" placeholder="যেমন: বাসা ভাড়া" />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="addRecurringBtn"><i data-lucide="plus"></i> যুক্ত করুন</button>
+          </div>
+          <div id="recurringList" class="recurring-list"></div>
+        </div>
+
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="piggy-bank"></i> সঞ্চয় লক্ষ্য (Savings Goal)</h3></div>
+          <div class="form-grid">
+            <div class="form-row">
+              <label for="goalTitle">লক্ষ্যের নাম</label>
+              <input type="text" id="goalTitle" placeholder="যেমন: নতুন ফোন কেনা" />
+            </div>
+            <div class="form-row">
+              <label for="goalTarget">লক্ষ্য পরিমাণ (৳)</label>
+              <input type="number" min="0" step="1" id="goalTarget" placeholder="০" />
+            </div>
+            <div class="form-row">
+              <label for="goalDate">লক্ষ্য তারিখ (ঐচ্ছিক)</label>
+              <input type="date" id="goalDate" />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="addGoalBtn"><i data-lucide="plus"></i> লক্ষ্য যুক্ত করুন</button>
+          </div>
+          <div id="goalsList" class="goals-list"></div>
+        </div>
+
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="zap"></i> কুইক-অ্যাড টেমপ্লেট</h3></div>
+          <p class="hint-text">প্রায়ই করা এন্ট্রি (যেমন "দুপুরের খাবার ৮০ টাকা") টেমপ্লেট বানিয়ে রাখুন — "নতুন এন্ট্রি" পেজ থেকে এক ট্যাপে যুক্ত করতে পারবেন।</p>
+          <div class="form-grid">
+            <div class="form-row">
+              <label for="templateLabel">টেমপ্লেটের নাম</label>
+              <input type="text" id="templateLabel" placeholder="যেমন: দুপুরের খাবার" />
+            </div>
+            <div class="form-row">
+              <label>ধরন</label>
+              <select id="templateKind">
+                <option value="expense">খরচ</option>
+                <option value="income">আয়</option>
+              </select>
+            </div>
+            <div class="form-row" id="templateCategoryRow">
+              <label for="templateCategory">খাত</label>
+              <select id="templateCategory"></select>
+            </div>
+            <div class="form-row" id="templateIncomeSourceRow" style="display:none;">
+              <label for="templateIncomeSource">আয়ের উৎস</label>
+              <select id="templateIncomeSource"></select>
+            </div>
+            <div class="form-row">
+              <label for="templateAmount">পরিমাণ (৳)</label>
+              <input type="number" min="0" step="0.01" id="templateAmount" placeholder="০.০০" />
+            </div>
+            <div class="form-row">
+              <label for="templateNote">নোট (ঐচ্ছিক)</label>
+              <input type="text" id="templateNote" placeholder="যেমন: ক্যান্টিন" />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="addTemplateBtn"><i data-lucide="plus"></i> টেমপ্লেট যুক্ত করুন</button>
+          </div>
+          <div id="templatesList" class="templates-list"></div>
         </div>
 
         <div class="ledger-card form-card">
@@ -903,6 +1131,24 @@
       <button class="btn btn-primary" id="applyLimitTodayBtn">আজ থেকে কার্যকর</button>
       <button class="btn btn-primary" id="applyLimitTomorrowBtn">আগামীকাল থেকে</button>
       <button class="btn btn-ghost" id="cancelLimitBtn">বাতিল</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ মোডাল: আংশিক পরিশোধ ============ -->
+<div class="modal-overlay" id="partialSettleModal">
+  <div class="modal-box daily-limit-box">
+    <div class="modal-icon"><i data-lucide="hand-coins"></i></div>
+    <h3>আংশিক পরিশোধ</h3>
+    <input type="hidden" id="partialSettleEntryId" />
+    <p class="hint-text" id="partialSettleInfo"></p>
+    <div class="form-row">
+      <label for="partialSettleAmount">এখন কত টাকা পরিশোধ হলো (৳)</label>
+      <input type="number" id="partialSettleAmount" min="0" step="0.01" placeholder="০.০০" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="partialSettleConfirmBtn">নিশ্চিত করুন</button>
+      <button class="btn btn-ghost" id="partialSettleCancelBtn">বাতিল</button>
     </div>
   </div>
 </div>

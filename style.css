@@ -28,6 +28,28 @@
   --sidebar-w: 264px;
 }
 
+/* ===================== ফিচার ১৫ — ডার্ক মোড ===================== */
+html[data-theme="dark"]{
+  --bg:            #1A2118;
+  --surface:       #222B20;
+  --surface-alt:   #2A3527;
+  --primary:       #C9A567;
+  --primary-soft:  #D9BD8A;
+  --accent:        #D9BD8A;
+  --accent-soft:   rgba(217,189,138,.14);
+  --income:        #7FB088;
+  --income-bg:     rgba(127,176,136,.12);
+  --expense:       #D98A8A;
+  --expense-bg:    rgba(217,138,138,.12);
+  --text:          #ECE7DC;
+  --muted:         #9C9486;
+  --border:        #3A4536;
+  --shadow:        0 1px 2px rgba(0,0,0,.2), 0 6px 24px rgba(0,0,0,.3);
+}
+html[data-theme="dark"] .login-page{ background: var(--bg); }
+html[data-theme="dark"] .stat-icon{ background: var(--surface-alt); }
+html[data-theme="dark"] .calc-equals{ color: var(--bg); }
+
 *{ box-sizing: border-box; }
 
 html,body{ margin:0; padding:0; }
@@ -160,7 +182,7 @@ h1,h2,h3,h4{ font-family: var(--font-display); color: var(--primary); margin:0; 
 .link-btn:hover{ color: var(--accent); }
 
 /* ===================== ড্যাশবোর্ড ===================== */
-.welcome-row{ margin-bottom: 1.5rem; }
+.welcome-row{ margin-bottom: 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
 .eyebrow{ text-transform:uppercase; letter-spacing:.15em; font-size:.72rem; color: var(--accent); margin:0 0 .25rem; font-weight:600; }
 .display-name{ font-size: 1.9rem; }
 
@@ -239,6 +261,20 @@ h1,h2,h3,h4{ font-family: var(--font-display); color: var(--primary); margin:0; 
   .entry-row{ align-items:flex-start; }
   .entry-amount{ font-size:.88rem; }
   .icon-btn{ width:28px; height:28px; }
+}
+
+/* ===================== ফিচার ১৯ — সোয়াইপ-টু-ডিলিট (মোবাইল) ===================== */
+.swipe-wrap{ position:relative; overflow:hidden; border-radius:10px; }
+.swipe-wrap .entry-row{ position:relative; background: var(--surface); z-index:2; transition: transform .2s ease; touch-action: pan-y; }
+.swipe-delete-bg{
+  position:absolute; inset:0; background: var(--expense); border-radius:10px;
+  display:flex; align-items:center; justify-content:flex-end; padding-right:1.2rem;
+  color:#fff; font-weight:700; font-size:.85rem; gap:.4rem; z-index:1;
+}
+.swipe-delete-bg i{ width:18px; height:18px; }
+@media (min-width: 769px){
+  /* ডেস্কটপে সোয়াইপ জেসচার কাজ করে না, তাই স্বাভাবিক হোভার-বাটন ব্যবস্থাই থাকবে */
+  .swipe-wrap .entry-row{ transform:none !important; }
 }
 
 .icon-btn{
@@ -344,9 +380,19 @@ textarea{ resize: vertical; }
   padding: .6rem .7rem; border-bottom: 2px solid var(--accent); white-space:nowrap;
 }
 .ledger-table td{ padding: .6rem .7rem; border-bottom: 1px solid var(--border); vertical-align:top; }
-.ledger-table tbody tr:hover{ background: rgba(176,141,79,.06); }
+.ledger-table tbody tr:nth-child(odd){ background: var(--surface); }
+.ledger-table tbody tr:nth-child(even){ background: var(--surface-alt); }
+.ledger-table tbody tr:hover{ background: rgba(176,141,79,.10); }
 .ledger-table .num{ text-align:right; font-family: var(--font-display); font-weight:700; }
 .ledger-table td.num{ white-space:nowrap; }
+.report-summary-table{ width:100%; border-collapse:collapse; margin-top:1.2rem; font-size:.88rem; }
+.report-summary-table th,
+.report-summary-table td{ padding:.55rem .7rem; border:1px solid var(--border); vertical-align:middle; }
+.report-summary-table thead th{ background: var(--primary); color: var(--accent); font-family: var(--font-display); }
+.report-summary-table tbody tr:nth-child(odd){ background: var(--surface); }
+.report-summary-table tbody tr:nth-child(even){ background: var(--surface-alt); }
+.report-summary-table td.num{ text-align:right; font-family: var(--font-display); font-weight:700; white-space:nowrap; }
+.report-summary-table tfoot td{ font-weight:700; font-family: var(--font-display); background: var(--accent-soft); }
 
 /* ===================== চার্ট ===================== */
 .chart-wrap{ position:relative; height: 280px; }
@@ -894,4 +940,158 @@ tr.over-limit-row td{ background: var(--expense-bg) !important; }
 
 @media (max-width: 480px){
   .exclude-options-grid{ grid-template-columns: 1fr; }
+}
+
+/* ===================== ইনসাইটস কার্ড ===================== */
+.insights-list{ display:flex; flex-direction:column; gap:.6rem; }
+.insight-item{
+  display:flex; align-items:flex-start; gap:.6rem;
+  padding:.65rem .8rem; border-radius:9px; border:1px solid var(--border);
+  background: var(--surface-alt); font-size:.85rem; color: var(--text);
+}
+.insight-item i{ width:16px; height:16px; flex-shrink:0; margin-top:.15rem; color: var(--accent); }
+.insight-item.positive i{ color: var(--income); }
+.insight-item.negative i{ color: var(--expense); }
+.insight-item .insight-text strong{ font-family: var(--font-display); }
+
+/* ===================== খাতভিত্তিক বাজেট ===================== */
+.category-budget-list{ display:flex; flex-direction:column; gap:.9rem; }
+.cat-budget-item{
+  border:1px solid var(--border); border-radius:10px; padding:.8rem .9rem;
+  background: var(--surface-alt);
+}
+.cat-budget-head{ display:flex; align-items:center; justify-content:space-between; gap:.6rem; margin-bottom:.5rem; }
+.cat-budget-name{ font-weight:600; font-size:.9rem; }
+.cat-budget-input-wrap{ display:flex; align-items:center; gap:.4rem; }
+.cat-budget-input-wrap input{
+  width:100px; padding:.3rem .5rem; font-size:.82rem;
+  border:1px solid var(--border); border-radius:7px; background: var(--surface); color: var(--text);
+}
+.cat-budget-input-wrap button{
+  border:none; background:none; color: var(--accent); cursor:pointer; display:flex; padding:.2rem;
+}
+.cat-budget-progress-row{ font-size:.78rem; color: var(--muted); display:flex; justify-content:space-between; margin-top:.4rem; }
+.cat-budget-progress-row.over{ color: var(--expense); font-weight:600; }
+
+/* ===================== বাৎসরিক সারসংক্ষেপ ===================== */
+.annual-summary-grid{ display:grid; grid-template-columns: repeat(2, 1fr); gap:.9rem; }
+.annual-stat{
+  border:1px solid var(--border); border-radius:10px; padding:.9rem 1rem;
+  background: var(--surface-alt);
+}
+.annual-stat-label{ font-size:.78rem; color: var(--muted); margin-bottom:.3rem; }
+.annual-stat-value{ font-family: var(--font-display); font-weight:700; font-size:1.2rem; color: var(--text); }
+.annual-stat-value.expense{ color: var(--expense); }
+.annual-stat-value.income{ color: var(--income); }
+#annualSummaryYear{
+  font-family: var(--font-body); font-size:.82rem; padding:.35rem .6rem;
+  border:1px solid var(--border); border-radius:8px; background: var(--surface); color: var(--text); cursor:pointer;
+}
+
+@media (max-width: 480px){
+  .annual-summary-grid{ grid-template-columns: 1fr 1fr; }
+}
+
+/* ===================== রিকারিং এন্ট্রি ===================== */
+.recurring-list, .goals-list, .templates-list{ display:flex; flex-direction:column; gap:.7rem; margin-top:1rem; }
+.recurring-item, .template-item{
+  display:flex; align-items:center; justify-content:space-between; gap:.6rem;
+  padding:.7rem .9rem; border:1px solid var(--border); border-radius:10px; background: var(--surface-alt);
+}
+.recurring-item-main, .template-item-main{ display:flex; flex-direction:column; gap:.15rem; min-width:0; }
+.recurring-item-title, .template-item-title{ font-weight:600; font-size:.9rem; }
+.recurring-item-sub, .template-item-sub{ font-size:.78rem; color: var(--muted); }
+.recurring-item-actions, .template-item-actions{ display:flex; gap:.4rem; align-items:center; flex-shrink:0; }
+.recurring-toggle{
+  width:38px; height:22px; border-radius:999px; border:none; cursor:pointer; position:relative;
+  background: var(--border); transition: background .15s ease; flex-shrink:0;
+}
+.recurring-toggle.active{ background: var(--income); }
+.recurring-toggle::after{
+  content:''; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%;
+  background:#fff; transition: transform .15s ease;
+}
+.recurring-toggle.active::after{ transform: translateX(16px); }
+
+/* ===================== সঞ্চয় লক্ষ্য ===================== */
+.goal-item{
+  border:1px solid var(--border); border-radius:10px; padding:.8rem .9rem; background: var(--surface-alt);
+}
+.goal-item-head{ display:flex; align-items:center; justify-content:space-between; gap:.6rem; margin-bottom:.4rem; }
+.goal-item-title{ font-weight:600; font-size:.9rem; }
+.goal-item-date{ font-size:.74rem; color: var(--muted); }
+.goal-progress-row{ display:flex; justify-content:space-between; font-size:.78rem; color: var(--muted); margin-top:.4rem; }
+.goal-add-amount-row{ display:flex; gap:.5rem; margin-top:.6rem; }
+.goal-add-amount-row input{ flex:1; padding:.35rem .6rem; font-size:.82rem; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); }
+.goal-add-amount-row button{
+  border:none; background: var(--accent); color: var(--primary); font-weight:600; font-size:.8rem;
+  padding:.35rem .8rem; border-radius:7px; cursor:pointer;
+}
+.goal-completed-badge{
+  display:inline-flex; align-items:center; gap:.3rem; font-size:.74rem; font-weight:700;
+  color: var(--income); background: rgba(61,92,70,.12); padding:.15rem .55rem; border-radius:999px;
+}
+
+/* ===================== কুইক-অ্যাড টেমপ্লেট ===================== */
+.quick-templates-row{
+  display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1.2rem;
+}
+.quick-template-btn{
+  border:1px solid var(--accent); background: var(--accent-soft); color: var(--primary);
+  font-size:.82rem; font-weight:600; padding:.4rem .85rem; border-radius:999px; cursor:pointer;
+  display:flex; align-items:center; gap:.4rem; transition: all .15s ease;
+}
+.quick-template-btn:hover{ background: var(--accent); color: #fff; }
+.quick-template-btn i{ width:14px; height:14px; }
+
+/* ===================== ব্যবহারকারী কাউন্টার ===================== */
+.user-counter-card{ text-align:center; }
+.user-counter-display{ display:flex; flex-direction:column; align-items:center; gap:.3rem; margin: .5rem 0 1.1rem; }
+.user-counter-number{
+  font-family: var(--font-display); font-weight:700; font-size:2.6rem; color: var(--accent);
+  line-height:1;
+}
+.user-counter-label{ font-size:.85rem; color: var(--muted); }
+
+/* ===================== গাইড পেজ ===================== */
+.guide-content{ display:flex; flex-direction:column; gap:.6rem; }
+.guide-section{
+  border:1px solid var(--border); border-radius:10px; overflow:hidden; background: var(--surface-alt);
+}
+.guide-section-head{
+  display:flex; align-items:center; justify-content:space-between; gap:.6rem;
+  padding:.8rem 1rem; cursor:pointer; user-select:none;
+}
+.guide-section-head h4{
+  display:flex; align-items:center; gap:.55rem; font-size:.92rem; font-weight:700; color: var(--text);
+}
+.guide-section-head h4 i{ width:17px; height:17px; color: var(--accent); flex-shrink:0; }
+.guide-chevron{ width:16px; height:16px; color: var(--muted); transition: transform .2s ease; flex-shrink:0; }
+.guide-section-head.open .guide-chevron{ transform: rotate(180deg); }
+.guide-section-body{
+  display:none; padding: 0 1.1rem 1rem; font-size:.86rem; color: var(--text); line-height:1.7;
+}
+.guide-section-body.open{ display:block; animation: fadeIn .2s ease; }
+.guide-section-body p{ margin: 0 0 .6rem; }
+.guide-section-body p:last-child{ margin-bottom:0; }
+.guide-section.hidden{ display:none; }
+
+.due-date-line{ display:flex; align-items:center; gap:.3rem; }
+.due-date-line i{ width:13px; height:13px; }
+.due-date-line.overdue{ color: var(--expense); font-weight:600; }
+
+/* ===================== থিম কালার সোয়াচ ===================== */
+.theme-color-row{ display:flex; gap:.7rem; flex-wrap:wrap; }
+.theme-color-swatch{
+  width:38px; height:38px; border-radius:50%; border:3px solid transparent; cursor:pointer;
+  transition: all .15s ease; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+}
+.theme-color-swatch:hover{ transform: scale(1.08); }
+.theme-color-swatch.active{ border-color: var(--text); }
+
+/* ===================== ফিচার ২০ — পিন লক ===================== */
+.pin-unlock-input{
+  width:100%; text-align:center; font-size:1.8rem; letter-spacing:.6rem;
+  padding:.7rem; margin: 1.2rem 0; border:1px solid var(--border); border-radius:10px;
+  background: var(--surface-alt); color: var(--text); font-family: var(--font-display);
 }

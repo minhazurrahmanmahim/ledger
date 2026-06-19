@@ -12,27 +12,37 @@ const DEFAULT_CATEGORIES = [
 
 const TOUR_CATS = ["ভাড়া", "খাবার", "হোটেল", "অন্যান্য"];
 
+const INCOME_SOURCES = ["বেতন", "ব্যবসা", "ফ্রিল্যান্স", "উপহার", "বিনিয়োগ", "অন্যান্য"];
+
 const WEEKDAYS_BN = ["রবিবার","সোমবার","মঙ্গলবার","বুধবার","বৃহস্পতিবার","শুক্রবার","শনিবার"];
 const MONTHS_BN  = ["জানুয়ারি","ফেব্রুয়ারি","মার্চ","এপ্রিল","মে","জুন","জুলাই","আগস্ট","সেপ্টেম্বর","অক্টোবর","নভেম্বর","ডিসেম্বর"];
 
 /* ===================== ডিফল্ট স্টেট ===================== */
 function defaultState(){
   return {
-    entries: [],     // {id, kind:'expense'|'receivable'|'payable', category, person, amount, date, time, note, isTour, tourId, tourCategory, settled, createdAt, updatedAt}
+    entries: [],     // {id, kind:'expense'|'receivable'|'payable'|'income', category, person, amount, date, time, note, isTour, tourId, tourCategory, settled, createdAt, updatedAt}
     archive: [],     // entry-shaped objects + archivedAt, archiveReason
     tours: [],       // {id, name, start, end}
     categories: [...DEFAULT_CATEGORIES],
+    categoryBudgets: {}, // { categoryName: monthlyAmount } — ক্যাটাগরি-ভিত্তিক মাসিক বাজেট
     contacts: [],    // {id, name, phone}
     dailyLimits: [], // [{amount, effectiveFrom: 'YYYY-MM-DD'}] — দৈনিক খরচের লিমিটের ইতিহাস
     dayExceptions: {}, // { 'YYYY-MM-DD': true } — যেদিনগুলো লিমিট হিসাবের বাইরে রাখা হয়েছে
-    notes: [], // {id, title, content, updatedAt}
+    notes: [], // {id, title, content, updatedAt, pinned, checklist:[{text,done}]}
+    recurring: [], // {id, kind, category, amount, note, dayOfMonth, lastGeneratedMonth, active}
+    savingsGoals: [], // {id, title, targetAmount, savedAmount, targetDate, createdAt}
+    quickTemplates: [], // {id, label, kind, category, amount, note}
     settings: {
       name: "মো. মিনহাজুর রহমান মাহিম",
       reminderEnabled: true,
       reminderTime: "21:00",
       lastReminderDate: "",
       monthlyBudget: 0,
-      profilePhoto: null
+      profilePhoto: null,
+      theme: "light",
+      currency: "BDT",
+      accentColor: "B08D4F",
+      pinHash: null
     }
   };
 }
@@ -47,10 +57,14 @@ function mergeWithDefaults(parsed){
     archive: parsed.archive || [],
     tours: parsed.tours || [],
     categories: (parsed.categories && parsed.categories.length) ? parsed.categories : def.categories,
+    categoryBudgets: parsed.categoryBudgets || {},
     contacts: parsed.contacts || [],
     dailyLimits: parsed.dailyLimits || [],
     dayExceptions: parsed.dayExceptions || {},
     notes: parsed.notes || [],
+    recurring: parsed.recurring || [],
+    savingsGoals: parsed.savingsGoals || [],
+    quickTemplates: parsed.quickTemplates || [],
     settings: { ...def.settings, ...(parsed.settings || {}) }
   };
 }
@@ -231,6 +245,134 @@ window.addEventListener('beforeinstallprompt', e => {
   }
 });
 
+/* ===================== ফিচার ১৫ — ডার্ক মোড ===================== */
+/* ===================== ফিচার ২০ — পিন লক ===================== */
+// সাধারণ হ্যাশ (true cryptographic security নয়, কিন্তু পিন প্লেইন-টেক্সটে রাখা এড়ানোর জন্য যথেষ্ট)
+async function hashPin(pin){
+  const enc = new TextEncoder().encode('mahims-ledger-salt-' + pin);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+let pinUnlocked = false; // সেশনে একবার আনলক হলে আর বারবার চাইবে না
+
+function isPinLockActive(){
+  return !!(state.settings && state.settings.pinHash);
+}
+
+function showPinLockIfNeeded(){
+  if(isPinLockActive() && !pinUnlocked){
+    document.getElementById('pinLockOverlay').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    setTimeout(() => document.getElementById('pinUnlockInput').focus(), 100);
+  } else {
+    document.getElementById('pinLockOverlay').style.display = 'none';
+    document.getElementById('app').style.display = '';
+  }
+}
+
+document.getElementById('pinUnlockBtn').addEventListener('click', async () => {
+  const input = document.getElementById('pinUnlockInput');
+  const errorEl = document.getElementById('pinUnlockError');
+  const entered = input.value.trim();
+  if(entered.length !== 4){
+    errorEl.textContent = '৪-সংখ্যার পিন দিন।';
+    errorEl.style.display = 'block';
+    return;
+  }
+  const hash = await hashPin(entered);
+  if(hash === state.settings.pinHash){
+    pinUnlocked = true;
+    errorEl.style.display = 'none';
+    input.value = '';
+    showPinLockIfNeeded();
+  } else {
+    errorEl.textContent = 'পিন সঠিক নয়, আবার চেষ্টা করুন।';
+    errorEl.style.display = 'block';
+    input.value = '';
+  }
+});
+
+document.getElementById('pinUnlockInput').addEventListener('keypress', e => {
+  if(e.key === 'Enter') document.getElementById('pinUnlockBtn').click();
+});
+
+document.getElementById('setPinBtn').addEventListener('click', async () => {
+  const pin = document.getElementById('appPinInput').value.trim();
+  if(pin.length !== 4 || !/^\d{4}$/.test(pin)){
+    toast('সঠিক ৪-সংখ্যার পিন দিন (শুধু সংখ্যা)।');
+    return;
+  }
+  state.settings.pinHash = await hashPin(pin);
+  saveState();
+  document.getElementById('appPinInput').value = '';
+  updatePinStatusUI();
+  toast('পিন সেট করা হয়েছে — পরের বার অ্যাপ খোলার সময় এই পিন চাইবে।');
+});
+
+document.getElementById('removePinBtn').addEventListener('click', () => {
+  openConfirm('পিন বন্ধ করুন', 'অ্যাপ লক বন্ধ করতে চান? এরপর পিন ছাড়াই অ্যাপ খোলা যাবে।', () => {
+    state.settings.pinHash = null;
+    saveState();
+    updatePinStatusUI();
+    toast('অ্যাপ লক বন্ধ করা হয়েছে।');
+  });
+});
+
+function updatePinStatusUI(){
+  const statusEl = document.getElementById('pinStatusText');
+  const removeBtn = document.getElementById('removePinBtn');
+  if(!statusEl) return;
+  if(isPinLockActive()){
+    statusEl.textContent = 'অ্যাপ লক চালু আছে।';
+    removeBtn.style.display = 'inline-block';
+  } else {
+    statusEl.textContent = 'অ্যাপ লক বন্ধ আছে।';
+    removeBtn.style.display = 'none';
+  }
+}
+
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+  const icon = document.querySelector('#themeToggleBtn i');
+  if(icon) icon.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
+  refreshIcons();
+}
+
+/* ফিচার ১৮ — কাস্টম থিম রঙ (ব্রাশ/অ্যাকসেন্ট রঙের প্রিসেট) */
+function hexToRgb(hex){
+  const r = parseInt(hex.slice(0,2), 16);
+  const g = parseInt(hex.slice(2,4), 16);
+  const b = parseInt(hex.slice(4,6), 16);
+  return `${r}, ${g}, ${b}`;
+}
+
+function applyAccentColor(hex){
+  if(!hex) hex = 'B08D4F';
+  const root = document.documentElement.style;
+  root.setProperty('--accent', '#' + hex);
+  root.setProperty('--accent-soft', `rgba(${hexToRgb(hex)}, .14)`);
+  document.querySelectorAll('.theme-color-swatch').forEach(sw => {
+    sw.classList.toggle('active', sw.dataset.color === hex);
+  });
+}
+
+document.querySelectorAll('.theme-color-swatch').forEach(sw => {
+  sw.addEventListener('click', () => {
+    state.settings.accentColor = sw.dataset.color;
+    applyAccentColor(sw.dataset.color);
+    saveState();
+    toast('থিম রঙ পরিবর্তিত হয়েছে।');
+  });
+});
+
+document.getElementById('themeToggleBtn').addEventListener('click', () => {
+  const current = (state.settings.theme === 'dark') ? 'light' : 'dark';
+  state.settings.theme = current;
+  applyTheme(current);
+  saveState();
+});
+
 function setupMobileInstallUI(){
   const btn = document.getElementById('mobileInstallBtn');
   const iosHint = document.getElementById('iosInstallHint');
@@ -296,6 +438,7 @@ function setupAuthUI(){
     if(pass.length < 6){ showError('পাসওয়ার্ড কমপক্ষে ৬ ডিজিট হতে হবে।'); return; }
     setLoading(true);
     auth.createUserWithEmailAndPassword(email, pass)
+      .then(() => incrementUserCounter())
       .catch(err => showError(translateAuthError(err)))
       .finally(() => setLoading(false));
   });
@@ -328,6 +471,8 @@ function setupAuthUI(){
       emailInput.value = '';
       passwordInput.value = '';
       setSyncStatus('syncing');
+      pinUnlocked = false;
+      showPinLockIfNeeded();
 
       // অফলাইনে থাকা অবস্থায় ক্যাশড ডেটাও দেখানোর জন্য includeMetadataChanges:true
       firestoreUnsub = db.collection('users').doc(user.uid)
@@ -346,6 +491,7 @@ function setupAuthUI(){
           }
           renderAll();
           loadSettingsForm();
+          showPinLockIfNeeded();
 
           // সিঙ্ক স্ট্যাটাস — অফলাইনে পরিবর্তন করলে "পরে সিঙ্ক হবে" দেখাবে,
           // ইন্টারনেট ফিরে এসে সার্ভারে পৌঁছালে "সিঙ্ক সম্পন্ন" দেখাবে
@@ -404,6 +550,10 @@ function latinDigits(val){
   return String(val).replace(/[০-৯]/g, d => map[d]);
 }
 
+const CURRENCY_SYMBOLS = {
+  BDT: '৳', USD: '$', EUR: '€', GBP: '£', INR: '₹', SAR: 'SR', AED: 'AED', MYR: 'RM'
+};
+
 function taka(amount){
   const num = Number(amount) || 0;
   const hasDecimal = Math.abs(num % 1) > 0.001;
@@ -411,7 +561,9 @@ function taka(amount){
     minimumFractionDigits: hasDecimal ? 2 : 0,
     maximumFractionDigits: 2
   });
-  return '৳ ' + bnDigits(formatted);
+  const symbol = CURRENCY_SYMBOLS[(state && state.settings && state.settings.currency) || 'BDT'] || '৳';
+  // বাংলা টাকা চিহ্নের ক্ষেত্রে সংখ্যাও বাংলায় দেখানো হয়; অন্য কারেন্সিতে ল্যাটিন সংখ্যা স্বাভাবিক থাকে
+  return symbol === '৳' ? (symbol + ' ' + bnDigits(formatted)) : (symbol + ' ' + formatted);
 }
 
 function todayStr(){
@@ -443,6 +595,10 @@ function entryMetaLine(e){
   if(e.time) parts.push(formatTimeBn(e.time));
   else parts.push('সময় উল্লেখ নেই');
   if(e.note) parts.push(escapeHtml(e.note));
+  if(e.partialPayments && e.partialPayments.length){
+    const totalPaid = e.partialPayments.reduce((s,p)=>s+p.amount,0);
+    parts.push(`আংশিক পরিশোধ হয়েছে ${taka(totalPaid)} (বাকি ${taka(e.amount)})`);
+  }
   return parts.join(' · ');
 }
 function formatFullDateBn(date){
@@ -451,6 +607,7 @@ function formatFullDateBn(date){
 
 function entryTitle(entry){
   if(entry.kind === 'expense') return entry.category || 'খরচ';
+  if(entry.kind === 'income') return 'আয়: ' + (entry.incomeSource || 'অন্যান্য');
   if(entry.kind === 'receivable') return 'পাই: ' + (entry.person || 'অজানা');
   if(entry.kind === 'payable') return 'দেব: ' + (entry.person || 'অজানা');
   return '';
@@ -476,12 +633,13 @@ function exclusionBadges(e){
 
 function entryAmountClass(entry){
   if(entry.kind === 'expense') return 'expense';
+  if(entry.kind === 'income') return 'income';
   if(entry.kind === 'receivable') return 'income';
   if(entry.kind === 'payable') return 'expense';
   return '';
 }
 function entryKindLabel(kind){
-  return {expense:'খরচ', receivable:'পাই', payable:'পাওনা'}[kind] || kind;
+  return {expense:'খরচ', income:'আয়', receivable:'পাই', payable:'পাওনা'}[kind] || kind;
 }
 
 /* ===================== দৈনিক খরচের লিমিট — হেল্পার ফাংশন ===================== */
@@ -696,6 +854,7 @@ const PAGE_TITLES = {
   archive: 'আর্কাইভ',
   calculator: 'ক্যালকুলেটর',
   notes: 'নোটস',
+  guide: 'ব্যবহার-বিধি',
   settings: 'সেটিংস'
 };
 
@@ -777,7 +936,11 @@ const tourFields       = document.getElementById('tourFields');
 const entryTourSel     = document.getElementById('entryTour');
 const entryTourCatSel  = document.getElementById('entryTourCategory');
 const categoryRow      = document.getElementById('categoryRow');
+const incomeSourceRow    = document.getElementById('incomeSourceRow');
+const entryIncomeSourceSel = document.getElementById('entryIncomeSource');
 const personRow        = document.getElementById('personRow');
+const dueDateRow       = document.getElementById('dueDateRow');
+const entryDueDateInput = document.getElementById('entryDueDate');
 const entryFormTitle   = document.getElementById('entryFormTitle');
 const tourCheckboxRow  = entryIsTour.closest('.form-row');
 const excludeOptionsRow      = document.getElementById('excludeOptionsRow');
@@ -796,26 +959,42 @@ document.querySelectorAll('#entryTypeControl .seg').forEach(seg => {
 });
 
 function updateEntryFormForType(){
+  // সব রো প্রথমে লুকিয়ে রাখা, তারপর প্রয়োজন অনুযায়ী দেখানো
+  categoryRow.style.display = 'none';
+  incomeSourceRow.style.display = 'none';
+  personRow.style.display = 'none';
+  dueDateRow.style.display = 'none';
+  tourCheckboxRow.style.display = 'none';
+  excludeOptionsRow.style.display = 'none';
+  entryCategorySel.required = false;
+  entryIncomeSourceSel.required = false;
+  entryPersonInput.required = false;
+
   if(currentEntryType === 'expense'){
     categoryRow.style.display = '';
-    personRow.style.display = 'none';
     tourCheckboxRow.style.display = '';
     excludeOptionsRow.style.display = '';
     entryCategorySel.required = true;
-    entryPersonInput.required = false;
+  } else if(currentEntryType === 'income'){
+    incomeSourceRow.style.display = '';
+    entryIncomeSourceSel.required = true;
   } else {
-    categoryRow.style.display = 'none';
+    // receivable / payable
     personRow.style.display = '';
-    tourCheckboxRow.style.display = 'none';
-    excludeOptionsRow.style.display = 'none';
+    dueDateRow.style.display = '';
+    entryPersonInput.required = true;
+  }
+
+  if(currentEntryType !== 'expense'){
     entryIsTour.checked = false;
     entryExcludeDailyTotal.checked = false;
     entryExcludeDailyLimit.checked = false;
     entryExcludeMonthlyTotal.checked = false;
     entryExcludeMonthlyLimit.checked = false;
     tourFields.style.display = 'none';
-    entryCategorySel.required = false;
-    entryPersonInput.required = true;
+  }
+  if(currentEntryType !== 'receivable' && currentEntryType !== 'payable'){
+    entryDueDateInput.value = '';
   }
 }
 
@@ -848,6 +1027,13 @@ function populateCategorySelect(){
   // (নতুন ক্যাটাগরি যুক্ত হওয়ার পর, বা যেকোনো renderAll()-এর পরে যাতে সিলেকশন হারিয়ে না যায়)
   if(prevValue && state.categories.includes(prevValue)){
     entryCategorySel.value = prevValue;
+  }
+}
+function populateIncomeSourceSelect(){
+  const prevValue = entryIncomeSourceSel.value;
+  entryIncomeSourceSel.innerHTML = INCOME_SOURCES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if(prevValue && INCOME_SOURCES.includes(prevValue)){
+    entryIncomeSourceSel.value = prevValue;
   }
 }
 function populateTourSelect(){
@@ -1179,6 +1365,7 @@ function resetEntryForm(){
   document.querySelectorAll('#entryTypeControl .seg').forEach(s => s.classList.toggle('active', s.dataset.value === 'expense'));
   // form.reset() ক্যাটাগরি সিলেক্টের মান মুছে দিতে পারে — তাই আবার পপুলেট করতে হবে
   populateCategorySelect();
+  populateIncomeSourceSelect();
   populateTourSelect();
   updateEntryFormForType();
   clearLinkedContact();
@@ -1203,9 +1390,11 @@ entryForm.addEventListener('submit', e => {
     time: entryTimeUnknown.checked ? '' : entryTimeInput.value,
     note: entryNoteInput.value.trim(),
     category: currentEntryType === 'expense' ? entryCategorySel.value : null,
-    person: currentEntryType !== 'expense' ? entryPersonInput.value.trim() : null,
-    contactName: currentEntryType !== 'expense' ? (selectedContact ? selectedContact.name : null) : null,
-    contactPhone: currentEntryType !== 'expense' ? (selectedContact ? selectedContact.phone : null) : null,
+    incomeSource: currentEntryType === 'income' ? entryIncomeSourceSel.value : null,
+    person: (currentEntryType === 'receivable' || currentEntryType === 'payable') ? entryPersonInput.value.trim() : null,
+    contactName: (currentEntryType === 'receivable' || currentEntryType === 'payable') ? (selectedContact ? selectedContact.name : null) : null,
+    contactPhone: (currentEntryType === 'receivable' || currentEntryType === 'payable') ? (selectedContact ? selectedContact.phone : null) : null,
+    dueDate: (currentEntryType === 'receivable' || currentEntryType === 'payable') ? (entryDueDateInput.value || null) : null,
     isTour: currentEntryType === 'expense' && entryIsTour.checked,
     tourId: (currentEntryType === 'expense' && entryIsTour.checked) ? entryTourSel.value : null,
     tourCategory: (currentEntryType === 'expense' && entryIsTour.checked) ? entryTourCatSel.value : null,
@@ -1252,12 +1441,16 @@ function editEntry(id){
   currentEntryType = entry.kind;
   // updateEntryFormForType আগে, তারপর ভ্যালু সেট — না হলে hidden field-এ সেট হয়ে সমস্যা হয়
   populateCategorySelect();
+  populateIncomeSourceSelect();
   populateTourSelect();
   updateEntryFormForType();
   if(entry.kind === 'expense'){
     entryCategorySel.value = entry.category || (state.categories[0] || '');
+  } else if(entry.kind === 'income'){
+    entryIncomeSourceSel.value = entry.incomeSource || INCOME_SOURCES[0];
   } else {
     entryPersonInput.value = entry.person || '';
+    entryDueDateInput.value = entry.dueDate || '';
   }
   entryAmountInput.value = entry.amount;
   entryDateInput.value = entry.date;
@@ -1293,6 +1486,53 @@ function editEntry(id){
   goToPage('add-entry');
 }
 
+/* ফিচার ১৯ — সোয়াইপ-টু-ডিলিট: একটা কন্টেইনারের ভিতরের সব .entry-row-কে সোয়াইপ-সক্ষম করা।
+   বাম দিকে সোয়াইপ করলে নিচে লাল "ডিলিট" দেখাবে, পর্যাপ্ত দূরত্ব সোয়াইপ করলে deleteCallback(id) চলবে। */
+function enableSwipeToDelete(containerEl, deleteCallback){
+  if(!containerEl || window.innerWidth > 768) return; // শুধু মোবাইলে সক্রিয়
+  containerEl.querySelectorAll('.entry-row[data-id]').forEach(row => {
+    if(row.closest('.swipe-wrap')) return; // আগেই র‍্যাপ করা থাকলে আবার করা হবে না
+
+    const wrap = document.createElement('div');
+    wrap.className = 'swipe-wrap';
+    const bg = document.createElement('div');
+    bg.className = 'swipe-delete-bg';
+    bg.innerHTML = `<i data-lucide="trash-2"></i> ডিলিট`;
+    row.parentNode.insertBefore(wrap, row);
+    wrap.appendChild(bg);
+    wrap.appendChild(row);
+
+    let startX = 0, currentX = 0, dragging = false;
+    const THRESHOLD = 90;
+
+    row.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX;
+      dragging = true;
+      row.style.transition = 'none';
+    }, { passive: true });
+
+    row.addEventListener('touchmove', e => {
+      if(!dragging) return;
+      currentX = e.touches[0].clientX - startX;
+      if(currentX > 0) currentX = 0; // শুধু বামে সোয়াইপ
+      row.style.transform = `translateX(${currentX}px)`;
+    }, { passive: true });
+
+    row.addEventListener('touchend', () => {
+      dragging = false;
+      row.style.transition = 'transform .2s ease';
+      if(currentX < -THRESHOLD){
+        row.style.transform = `translateX(-100%)`;
+        setTimeout(() => deleteCallback(row.dataset.id), 150);
+      } else {
+        row.style.transform = 'translateX(0)';
+      }
+      currentX = 0;
+    });
+  });
+  refreshIcons();
+}
+
 function deleteEntry(id){
   openConfirm('এন্ট্রি ডিলিট করুন', 'এই এন্ট্রিটি তালিকা থেকে মুছে আর্কাইভে পাঠানো হবে। পরে প্রয়োজনে পুনরুদ্ধার করা যাবে।', () => {
     const idx = state.entries.findIndex(en => en.id === id);
@@ -1306,6 +1546,7 @@ function deleteEntry(id){
   });
 }
 
+/* ফিচার ১৩ — আংশিক পরিশোধ: পুরো এন্ট্রি সেটল করার বদলে একটা অংশ পরিশোধ হলে তা বাদ দিয়ে বাকিটা এন্ট্রিতে রেখে দেওয়া */
 function settleEntry(id){
   const entry = state.entries.find(en => en.id === id);
   if(!entry) return;
@@ -1321,9 +1562,252 @@ function settleEntry(id){
   });
 }
 
+function openPartialSettleModal(id){
+  const entry = state.entries.find(en => en.id === id);
+  if(!entry) return;
+  document.getElementById('partialSettleEntryId').value = id;
+  document.getElementById('partialSettleInfo').textContent =
+    `${entry.person || 'অজানা'} — মোট ${taka(entry.amount)} (${entryKindLabel(entry.kind)})`;
+  document.getElementById('partialSettleAmount').value = '';
+  document.getElementById('partialSettleAmount').max = entry.amount;
+  document.getElementById('partialSettleModal').classList.add('open');
+}
+
+document.getElementById('partialSettleCancelBtn').addEventListener('click', () => {
+  document.getElementById('partialSettleModal').classList.remove('open');
+});
+
+document.getElementById('partialSettleConfirmBtn').addEventListener('click', () => {
+  const id = document.getElementById('partialSettleEntryId').value;
+  const paidNow = Number(document.getElementById('partialSettleAmount').value);
+  const entry = state.entries.find(en => en.id === id);
+  if(!entry) return;
+  if(!paidNow || paidNow <= 0){ toast('সঠিক পরিমাণ দিন।'); return; }
+  if(paidNow >= entry.amount){
+    // পুরোটাই পরিশোধ হয়ে গেলে সম্পূর্ণ সেটল করে দেওয়া
+    document.getElementById('partialSettleModal').classList.remove('open');
+    settleEntry(id);
+    return;
+  }
+  // আংশিক পরিশোধের ইতিহাস এন্ট্রিতে যুক্ত করে, বাকি অংক দিয়ে মূল এন্ট্রি আপডেট করা
+  if(!entry.partialPayments) entry.partialPayments = [];
+  entry.partialPayments.push({ amount: paidNow, date: todayStr(), createdAt: new Date().toISOString() });
+  entry.amount = Math.round((entry.amount - paidNow) * 100) / 100;
+  entry.updatedAt = new Date().toISOString();
+  saveState();
+  document.getElementById('partialSettleModal').classList.remove('open');
+  renderAll();
+  toast(`${taka(paidNow)} আংশিক পরিশোধ হিসেবে যুক্ত হয়েছে। বাকি আছে ${taka(entry.amount)}।`);
+});
+
 /* =====================================================================
    রেন্ডার: ড্যাশবোর্ড
    ===================================================================== */
+
+/* ফিচার ১, ৩, ৫ — ট্রেন্ড তুলনা, ব্যস্ত খাত/দিন হাইলাইট, গড় দৈনিক/সাপ্তাহিক খরচ */
+function renderInsights(thisMonth, monthExpense, monthIncome){
+  const container = document.getElementById('insightsList');
+  if(!container) return;
+
+  const insights = [];
+  const now = new Date();
+  const today = todayStr();
+
+  // ফিচার ১২ — নির্ধারিত তারিখ পার হওয়া পাই/পাওনার রিমাইন্ডার
+  const overdueDues = state.entries.filter(e =>
+    (e.kind === 'receivable' || e.kind === 'payable') && e.dueDate && e.dueDate < today
+  );
+  if(overdueDues.length > 0){
+    const overdueReceivable = overdueDues.filter(e => e.kind === 'receivable').length;
+    const overduePayable = overdueDues.filter(e => e.kind === 'payable').length;
+    const msgParts = [];
+    if(overdueReceivable) msgParts.push(`${bnDigits(overdueReceivable)}টি পাই`);
+    if(overduePayable) msgParts.push(`${bnDigits(overduePayable)}টি পাওনা`);
+    insights.push({
+      icon: 'alarm-clock', type: 'negative',
+      text: `নির্ধারিত তারিখ পার হয়ে গেছে এমন ${msgParts.join(' ও ')} আছে — "পাই ও পাওনা" পেজে দেখুন।`
+    });
+  }
+
+  // গত মাসের হিসাব
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonth = lastMonthDate.getFullYear() + '-' + pad(lastMonthDate.getMonth()+1);
+  const lastMonthExpense = getMonthExpenseTotal(lastMonth);
+
+  // ১. মাস-অনুযায়ী তুলনা (ট্রেন্ড)
+  if(lastMonthExpense > 0){
+    const diffPct = Math.round(((monthExpense - lastMonthExpense) / lastMonthExpense) * 100);
+    if(diffPct > 0){
+      insights.push({
+        icon: 'trending-up', type: 'negative',
+        text: `এই মাসে গত মাসের তুলনায় <strong>${bnDigits(diffPct)}%</strong> বেশি খরচ হয়েছে।`
+      });
+    } else if(diffPct < 0){
+      insights.push({
+        icon: 'trending-down', type: 'positive',
+        text: `এই মাসে গত মাসের তুলনায় <strong>${bnDigits(Math.abs(diffPct))}%</strong> কম খরচ হয়েছে — ভালো চলছে!`
+      });
+    } else {
+      insights.push({
+        icon: 'minus', type: '',
+        text: `এই মাসের খরচ গত মাসের সমান।`
+      });
+    }
+  }
+
+  // ৩. সবচেয়ে বেশি খরচ হওয়া ক্যাটাগরি (এই মাসে)
+  const monthEntries = state.entries.filter(e => e.kind === 'expense' && e.date && e.date.slice(0,7) === thisMonth);
+  if(monthEntries.length > 0){
+    const catTotals = {};
+    monthEntries.forEach(e => { catTotals[e.category || 'অন্যান্য'] = (catTotals[e.category || 'অন্যান্য'] || 0) + e.amount; });
+    const topCat = Object.entries(catTotals).sort((a,b) => b[1]-a[1])[0];
+    insights.push({
+      icon: 'flame', type: '',
+      text: `এই মাসে সবচেয়ে বেশি খরচ হয়েছে <strong>${escapeHtml(topCat[0])}</strong> খাতে — ${taka(topCat[1])}।`
+    });
+
+    // সবচেয়ে বেশি খরচ হওয়া দিন
+    const dayTotals = {};
+    monthEntries.forEach(e => { dayTotals[e.date] = (dayTotals[e.date] || 0) + e.amount; });
+    const topDay = Object.entries(dayTotals).sort((a,b) => b[1]-a[1])[0];
+    insights.push({
+      icon: 'calendar-clock', type: '',
+      text: `এই মাসের সবচেয়ে বেশি খরচের দিন <strong>${formatDateDMY(topDay[0])}</strong> — ${taka(topDay[1])}।`
+    });
+  }
+
+  // ৫. গড় দৈনিক/সাপ্তাহিক খরচ (এই মাসের এখন পর্যন্ত হিসাব)
+  const dayOfMonth = now.getDate();
+  if(monthExpense > 0 && dayOfMonth > 0){
+    const avgDaily = monthExpense / dayOfMonth;
+    const avgWeekly = avgDaily * 7;
+    insights.push({
+      icon: 'calculator', type: '',
+      text: `এই মাসে গড় দৈনিক খরচ <strong>${taka(Math.round(avgDaily))}</strong>, গড় সাপ্তাহিক খরচ <strong>${taka(Math.round(avgWeekly))}</strong>।`
+    });
+  }
+
+  // আয়-ব্যয়ের অনুপাত (ফিচার ৬ সম্পর্কিত)
+  if(monthIncome > 0){
+    const savedPct = Math.round(((monthIncome - monthExpense) / monthIncome) * 100);
+    if(savedPct >= 0){
+      insights.push({
+        icon: 'piggy-bank', type: 'positive',
+        text: `এই মাসের আয়ের <strong>${bnDigits(savedPct)}%</strong> এখনো খরচ হয়নি।`
+      });
+    } else {
+      insights.push({
+        icon: 'alert-circle', type: 'negative',
+        text: `এই মাসে আয়ের তুলনায় <strong>${bnDigits(Math.abs(savedPct))}%</strong> বেশি খরচ হয়ে গেছে।`
+      });
+    }
+  }
+
+  if(insights.length === 0){
+    container.innerHTML = `<div class="empty-state">পর্যাপ্ত তথ্য জমা হলে এখানে স্বয়ংক্রিয় ইনসাইট দেখানো হবে।</div>`;
+  } else {
+    container.innerHTML = insights.map(ins => `
+      <div class="insight-item ${ins.type}">
+        <i data-lucide="${ins.icon}"></i>
+        <span class="insight-text">${ins.text}</span>
+      </div>
+    `).join('');
+  }
+  refreshIcons();
+}
+
+/* ফিচার ১৭ — দিনের সারাংশের একটা শেয়ারযোগ্য ছবি তৈরি করা */
+function shareSummaryImage(){
+  const canvas = document.createElement('canvas');
+  const W = 800, H = 1000;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const today = todayStr();
+  const thisMonth = today.slice(0,7);
+  const todayExpense = getDayExpenseTotal(today);
+  const monthExpense = getMonthExpenseTotal(thisMonth);
+  const totalReceivable = state.entries.filter(e => e.kind === 'receivable').reduce((s,e)=>s+e.amount,0);
+  const totalPayable = state.entries.filter(e => e.kind === 'payable').reduce((s,e)=>s+e.amount,0);
+  const dailyLimit = getCurrentDailyLimit();
+
+  // ব্যাকগ্রাউন্ড
+  ctx.fillStyle = '#F6F1E6';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(176,141,79,.35)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(20, 20, W-40, H-40);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#2B3D2F';
+  ctx.font = '700 34px "Noto Serif Bengali", serif';
+  ctx.fillText("Mahim's Ledger", W/2, 95);
+  ctx.font = '400 18px "Hind Siliguri", sans-serif';
+  ctx.fillStyle = '#8C8374';
+  ctx.fillText(formatFullDateBn(new Date()), W/2, 130);
+
+  const rows = [
+    { label: 'আজকের মোট খরচ', value: taka(todayExpense), color: '#7C3B3B' },
+    { label: 'এই মাসের মোট খরচ', value: taka(monthExpense), color: '#2B3D2F' },
+    { label: 'মোট পাই (অন্যের কাছে)', value: taka(totalReceivable), color: '#3D5C46' },
+    { label: 'মোট পাওনা (আমার কাছে)', value: taka(totalPayable), color: '#7C3B3B' },
+  ];
+  if(dailyLimit > 0){
+    rows.push({ label: 'দৈনিক লিমিট', value: taka(dailyLimit), color: '#B08D4F' });
+  }
+
+  let y = 210;
+  rows.forEach(r => {
+    ctx.fillStyle = '#FFFDF9';
+    ctx.strokeStyle = '#E3D9C6';
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, 70, y, W-140, 110, 14);
+    ctx.fill(); ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.font = '400 20px "Hind Siliguri", sans-serif';
+    ctx.fillStyle = '#8C8374';
+    ctx.fillText(r.label, 100, y + 42);
+
+    ctx.font = '700 38px "Noto Serif Bengali", serif';
+    ctx.fillStyle = r.color;
+    ctx.fillText(r.value, 100, y + 85);
+
+    y += 130;
+  });
+
+  ctx.textAlign = 'center';
+  ctx.font = '400 15px "Hind Siliguri", sans-serif';
+  ctx.fillStyle = '#8C8374';
+  ctx.fillText('মাহিম\'স লেজার অ্যাপ দিয়ে তৈরি — ব্যক্তিগত হিসাব-খাতা', W/2, H - 45);
+
+  canvas.toBlob(blob => {
+    const file = new File([blob], 'mahims-ledger-summary.png', { type: 'image/png' });
+    if(navigator.canShare && navigator.canShare({ files: [file] })){
+      navigator.share({ files: [file], title: 'আমার হিসাবের সারাংশ' }).catch(() => {});
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'mahims-ledger-summary.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('সারাংশের ছবি ডাউনলোড হয়েছে।');
+    }
+  }, 'image/png');
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+
+document.getElementById('shareSummaryBtn').addEventListener('click', shareSummaryImage);
+
 function renderDashboard(){
   document.getElementById('dashName').textContent = state.settings.name;
 
@@ -1349,12 +1833,20 @@ function renderDashboard(){
     .filter(e => e.kind === 'payable')
     .reduce((s,e) => s + e.amount, 0);
 
+  // "এই মাসের মোট আয়" স্ট্যাট কার্ডে
+  const monthIncome = state.entries
+    .filter(e => e.kind === 'income' && e.date && e.date.slice(0,7) === thisMonth)
+    .reduce((s,e) => s + e.amount, 0);
+
   const statTodayEl = document.getElementById('statTodayExpense');
   statTodayEl.textContent = taka(todayExpense);
   statTodayEl.classList.toggle('over-limit-text', isDayOverLimit(today));
   document.getElementById('statMonthExpense').textContent = taka(monthExpense);
   document.getElementById('statTotalReceivable').textContent = taka(totalReceivable);
   document.getElementById('statTotalPayable').textContent = taka(totalPayable);
+  document.getElementById('statMonthIncome').textContent = taka(monthIncome);
+
+  renderInsights(thisMonth, monthExpense, monthIncome);
 
   // মাসিক বাজেট (মাসিক লিমিট-নির্দিষ্ট হিসাব ব্যবহার করা হচ্ছে)
   const budget = state.settings.monthlyBudget || 0;
@@ -1511,6 +2003,13 @@ function contactInfoLine(e){
   return `<span class="entry-sub contact-link-line"><i data-lucide="link"></i> কন্টাক্ট: ${parts.join(' · ')}</span>`;
 }
 
+/* ফিচার ১২ — পাই/পাওনার নির্ধারিত তারিখ দেখানো (লিমিট পার হলে লাল রঙে) */
+function dueDateLine(e){
+  if(!e.dueDate) return '';
+  const overdue = e.dueDate < todayStr();
+  return `<span class="entry-sub due-date-line${overdue ? ' overdue' : ''}"><i data-lucide="calendar-clock"></i> ${overdue ? 'নির্ধারিত তারিখ পার হয়ে গেছে' : 'নির্ধারিত তারিখ'}: ${formatDateDMY(e.dueDate)}</span>`;
+}
+
 function renderDueList(containerId, list, amountClass){
   const wrap = document.getElementById(containerId);
   if(list.length === 0){
@@ -1545,7 +2044,7 @@ function renderDueList(containerId, list, amountClass){
             <div class="due-group-main">
               <span class="entry-title">${escapeHtml(key)}</span>
               <span class="entry-sub">${entryMetaLine(e)}</span>
-              ${contactInfoLine(e)}
+              ${contactInfoLine(e)}${dueDateLine(e)}
             </div>
             <span class="entry-amount ${amountClass}">${taka(total)}</span>
           </div>
@@ -1553,6 +2052,8 @@ function renderDueList(containerId, list, amountClass){
             <div class="entry-row">
               <div class="entry-main"><span class="entry-sub">এই এন্ট্রির বিস্তারিত</span></div>
               <div class="entry-actions">
+                <button class="icon-btn" data-action="partial" data-id="${e.id}" title="আংশিক পরিশোধ"><i data-lucide="split"></i></button>
+                <button class="icon-btn" data-action="share" data-id="${e.id}" title="শেয়ার করুন"><i data-lucide="share-2"></i></button>
                 <button class="icon-btn" data-action="settle" data-id="${e.id}" title="পরিশোধ হয়েছে"><i data-lucide="check-circle-2"></i></button>
                 <button class="icon-btn" data-action="edit" data-id="${e.id}" title="সম্পাদনা"><i data-lucide="pencil"></i></button>
                 <button class="icon-btn danger" data-action="delete" data-id="${e.id}" title="ডিলিট"><i data-lucide="trash-2"></i></button>
@@ -1581,10 +2082,12 @@ function renderDueList(containerId, list, amountClass){
             <div class="entry-row">
               <div class="entry-main">
                 <span class="entry-sub">${entryMetaLine(e)}</span>
-                ${contactInfoLine(e)}
+                ${contactInfoLine(e)}${dueDateLine(e)}
               </div>
               <span class="entry-amount ${amountClass}">${taka(e.amount)}</span>
               <div class="entry-actions">
+                <button class="icon-btn" data-action="partial" data-id="${e.id}" title="আংশিক পরিশোধ"><i data-lucide="split"></i></button>
+                <button class="icon-btn" data-action="share" data-id="${e.id}" title="শেয়ার করুন"><i data-lucide="share-2"></i></button>
                 <button class="icon-btn" data-action="settle" data-id="${e.id}" title="পরিশোধ হয়েছে"><i data-lucide="check-circle-2"></i></button>
                 <button class="icon-btn" data-action="edit" data-id="${e.id}" title="সম্পাদনা"><i data-lucide="pencil"></i></button>
                 <button class="icon-btn danger" data-action="delete" data-id="${e.id}" title="ডিলিট"><i data-lucide="trash-2"></i></button>
@@ -1613,8 +2116,33 @@ function renderDueList(containerId, list, amountClass){
     if(btn.dataset.action === 'edit') editEntry(entryId);
     if(btn.dataset.action === 'delete') deleteEntry(entryId);
     if(btn.dataset.action === 'settle') settleEntry(entryId);
+    if(btn.dataset.action === 'partial') openPartialSettleModal(entryId);
+    if(btn.dataset.action === 'share') shareDueEntry(entryId);
   });
 });
+
+/* ফিচার ১৪ — পাই/পাওনার তথ্য মেসেজ আকারে শেয়ার করা (WhatsApp/SMS/অন্য অ্যাপে) */
+function shareDueEntry(id){
+  const entry = state.entries.find(en => en.id === id);
+  if(!entry) return;
+  const isReceivable = entry.kind === 'receivable';
+  const verb = isReceivable ? 'পাই' : 'পাওনা — দিতে হবে';
+  const name = entry.person || 'আপনার কাছে';
+  const text = isReceivable
+    ? `${name}, আমার হিসাব অনুযায়ী আপনার কাছে আমি ${taka(entry.amount)} টাকা পাই। সুবিধামত ফেরত দিলে খুশি হব। ধন্যবাদ।`
+    : `${name}, আমার হিসাব অনুযায়ী আপনাকে আমি ${taka(entry.amount)} টাকা দেওয়ার কথা। শীঘ্রই পরিশোধ করে দিচ্ছি।`;
+
+  if(navigator.share){
+    navigator.share({ text }).catch(() => {});
+  } else {
+    // শেয়ার API না থাকলে ক্লিপবোর্ডে কপি করে দেওয়া
+    navigator.clipboard.writeText(text).then(() => {
+      toast('মেসেজ ক্লিপবোর্ডে কপি হয়েছে — যেকোনো অ্যাপে পেস্ট করে পাঠাতে পারেন।');
+    }).catch(() => {
+      toast('শেয়ার করা সম্ভব হলো না।');
+    });
+  }
+}
 
 /* =====================================================================
    ট্যুর হিসাব
@@ -1653,7 +2181,7 @@ function renderTours(){
     const itemsHtml = items.length === 0
       ? `<div class="empty-state">এই ট্যুরে এখনো কোনো খরচ যুক্ত হয়নি। "নতুন এন্ট্রি" পেজ থেকে "ট্যুর সম্পর্কিত খরচ" চেকবক্স দিয়ে যুক্ত করুন।</div>`
       : [...items].sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time)).map(it => `
-        <div class="entry-row">
+        <div class="entry-row" data-id="${it.id}">
           <div class="entry-main">
             <span class="entry-title">${escapeHtml(it.tourCategory || 'অন্যান্য')} — ${escapeHtml(it.note || '')}</span>
             <span class="entry-sub">${entryMetaLine(it)}</span>
@@ -1692,6 +2220,7 @@ function renderTours(){
   wrap.querySelectorAll('[data-action="edit"]').forEach(b => b.addEventListener('click', () => editEntry(b.dataset.id)));
   wrap.querySelectorAll('[data-action="delete"]').forEach(b => b.addEventListener('click', () => deleteEntry(b.dataset.id)));
   wrap.querySelectorAll('[data-action="delete-tour"]').forEach(b => b.addEventListener('click', () => deleteTour(b.dataset.id)));
+  wrap.querySelectorAll('.entry-list').forEach(list => enableSwipeToDelete(list, deleteEntry));
   refreshIcons();
 }
 
@@ -1732,6 +2261,7 @@ let categoryChartInstance = null;
 
 function renderCategories(){
   populateCategorySelect();
+  populateIncomeSourceSelect();
 
   // মোট হিসাব (সর্বমোট, এন্ট্রিতে থাকা সব ক্যাটাগরি বিবেচনায়)
   const totals = {};
@@ -1800,6 +2330,77 @@ function renderCategories(){
     }
   });
   refreshIcons();
+  renderCategoryBudgets();
+}
+
+/* ফিচার ২ — খাতভিত্তিক মাসিক বাজেট */
+function renderCategoryBudgets(){
+  const wrap = document.getElementById('categoryBudgetList');
+  if(!wrap) return;
+  const thisMonth = todayStr().slice(0,7);
+
+  // এই মাসে প্রতিটি খাতে কত খরচ হয়েছে
+  const monthTotals = {};
+  state.entries
+    .filter(e => e.kind === 'expense' && e.date && e.date.slice(0,7) === thisMonth)
+    .forEach(e => {
+      const cat = e.category || 'অন্যান্য';
+      monthTotals[cat] = (monthTotals[cat] || 0) + e.amount;
+    });
+
+  if(state.categories.length === 0){
+    wrap.innerHTML = `<div class="empty-state">কোনো ক্যাটাগরি নেই।</div>`;
+    return;
+  }
+
+  wrap.innerHTML = state.categories.map(cat => {
+    const budget = (state.categoryBudgets && state.categoryBudgets[cat]) || 0;
+    const spent = monthTotals[cat] || 0;
+    const safeCat = escapeHtml(cat);
+    let progressHtml = '';
+    if(budget > 0){
+      const pct = Math.min(100, (spent / budget) * 100);
+      const over = spent > budget;
+      progressHtml = `
+        <div class="progress-track"><div class="progress-fill${over ? ' over-budget' : ''}" style="width:${pct}%"></div></div>
+        <div class="cat-budget-progress-row${over ? ' over' : ''}">
+          <span>খরচ হয়েছে: ${taka(spent)}</span>
+          <span>${over ? 'বাজেট অতিক্রম: ' + taka(spent - budget) : 'বাকি: ' + taka(budget - spent)}</span>
+        </div>
+      `;
+    }
+    return `
+      <div class="cat-budget-item">
+        <div class="cat-budget-head">
+          <span class="cat-budget-name">${safeCat}</span>
+          <div class="cat-budget-input-wrap">
+            <input type="number" min="0" step="1" placeholder="বাজেট নেই" value="${budget > 0 ? budget : ''}" data-cat="${safeCat}" class="cat-budget-input" />
+            <button type="button" class="cat-budget-save" data-cat="${safeCat}" title="সংরক্ষণ করুন"><i data-lucide="check"></i></button>
+          </div>
+        </div>
+        ${progressHtml}
+      </div>
+    `;
+  }).join('');
+
+  wrap.querySelectorAll('.cat-budget-save').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = btn.dataset.cat;
+      const input = wrap.querySelector(`.cat-budget-input[data-cat="${CSS.escape(cat)}"]`);
+      const val = Number(input.value);
+      if(!state.categoryBudgets) state.categoryBudgets = {};
+      if(!val || val <= 0){
+        delete state.categoryBudgets[cat];
+      } else {
+        state.categoryBudgets[cat] = val;
+      }
+      saveState();
+      renderCategoryBudgets();
+      toast('খাতভিত্তিক বাজেট সংরক্ষিত হয়েছে।');
+    });
+  });
+
+  refreshIcons();
 }
 
 /* =====================================================================
@@ -1851,8 +2452,11 @@ function renderReportTable(){
   currentFilteredEntries = rows;
 
   const tbody = document.querySelector('#reportTable tbody');
+  const summaryWrap = document.getElementById('reportDetailedSummary');
+
   if(rows.length === 0){
     tbody.innerHTML = `<tr><td colspan="6" class="empty-state">কোনো তথ্য পাওয়া যায়নি।</td></tr>`;
+    if(summaryWrap) summaryWrap.innerHTML = '';
     return;
   }
   tbody.innerHTML = rows.map(e => `
@@ -1860,31 +2464,216 @@ function renderReportTable(){
       <td>${formatDateDMY(e.date)}</td>
       <td>${formatTimeBn(e.time)}</td>
       <td>${entryKindLabel(e.kind)}</td>
-      <td>${escapeHtml(e.kind === 'expense' ? (e.category || '') : (e.person || ''))}</td>
+      <td>${escapeHtml(e.kind === 'expense' ? (e.category || '') :
+            e.kind === 'income' ? (e.incomeSource || '') : (e.person || ''))}</td>
       <td>${escapeHtml(e.note || '')}</td>
       <td class="num ${entryAmountClass(e)}">${taka(e.amount)}</td>
     </tr>
   `).join('');
+
+  // বিস্তারিত সারাংশ টেবিল
+  if(summaryWrap){
+    const expenseRows = rows.filter(e => e.kind === 'expense');
+    const incomeRows  = rows.filter(e => e.kind === 'income');
+    const paiRows     = rows.filter(e => e.kind === 'receivable');
+    const paonaRows   = rows.filter(e => e.kind === 'payable');
+
+    const totalExpense = expenseRows.reduce((s,e)=>s+e.amount,0);
+    const totalIncome  = incomeRows.reduce((s,e)=>s+e.amount,0);
+    const totalPai     = paiRows.reduce((s,e)=>s+e.amount,0);
+    const totalPaona   = paonaRows.reduce((s,e)=>s+e.amount,0);
+
+    // দৈনিক লিমিট সারাংশ
+    const datesWithExpense = [...new Set(expenseRows.map(e=>e.date))].sort();
+    let overLimitDays = 0, totalLimitEligible = 0, totalOverLimit = 0;
+    datesWithExpense.forEach(d => {
+      const lim = getDailyLimitForDate(d);
+      const forLim = getDayExpenseForLimit(d);
+      totalLimitEligible += forLim;
+      if(lim > 0 && !state.dayExceptions?.[d] && forLim > lim){
+        overLimitDays++;
+        totalOverLimit += forLim - lim;
+      }
+    });
+
+    // ক্যাটাগরি ব্রেকডাউন
+    const catBreakdown = {};
+    expenseRows.forEach(e => {
+      const c = e.category || 'অন্যান্য';
+      catBreakdown[c] = (catBreakdown[c] || 0) + e.amount;
+    });
+    const sortedCats = Object.entries(catBreakdown).sort((a,b)=>b[1]-a[1]);
+
+    summaryWrap.innerHTML = `
+      <div style="margin-top:1.6rem;">
+        <h4 style="font-family:var(--font-display);color:var(--primary);margin-bottom:.9rem;font-size:1rem;">
+          <i data-lucide="list-checks" style="width:16px;height:16px;vertical-align:middle;margin-right:.4rem;"></i>
+          ফিল্টার-পরবর্তী বিস্তারিত সারাংশ
+        </h4>
+        <div style="overflow-x:auto;">
+          <table class="report-summary-table">
+            <thead>
+              <tr>
+                <th>বিবরণ</th>
+                <th style="text-align:right;">এন্ট্রি সংখ্যা</th>
+                <th style="text-align:right;">মোট পরিমাণ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>মোট খরচ</td>
+                <td class="num">${bnDigits(expenseRows.length)}</td>
+                <td class="num expense">${taka(totalExpense)}</td>
+              </tr>
+              <tr>
+                <td>লিমিট-যোগ্য মোট খরচ</td>
+                <td class="num">—</td>
+                <td class="num">${taka(totalLimitEligible)}</td>
+              </tr>
+              <tr>
+                <td>লিমিট অতিক্রান্ত দিন</td>
+                <td class="num">${bnDigits(overLimitDays)}</td>
+                <td class="num${totalOverLimit>0?' expense':''}">${totalOverLimit>0?taka(totalOverLimit):'—'}</td>
+              </tr>
+              ${incomeRows.length>0?`<tr>
+                <td>মোট আয়</td>
+                <td class="num">${bnDigits(incomeRows.length)}</td>
+                <td class="num income">${taka(totalIncome)}</td>
+              </tr>`:''}
+              ${paiRows.length>0?`<tr>
+                <td>মোট পাই (অন্যের কাছে)</td>
+                <td class="num">${bnDigits(paiRows.length)}</td>
+                <td class="num income">${taka(totalPai)}</td>
+              </tr>`:''}
+              ${paonaRows.length>0?`<tr>
+                <td>মোট পাওনা (আমার কাছে)</td>
+                <td class="num">${bnDigits(paonaRows.length)}</td>
+                <td class="num expense">${taka(totalPaona)}</td>
+              </tr>`:''}
+              ${sortedCats.map(([cat,amt])=>`<tr>
+                <td style="padding-left:1.8rem;color:var(--muted);">${escapeHtml(cat)}</td>
+                <td class="num">—</td>
+                <td class="num">${taka(amt)}</td>
+              </tr>`).join('')}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>নিট (আয় − খরচ)</td>
+                <td class="num">—</td>
+                <td class="num${totalIncome-totalExpense>=0?' income':' expense'}">${taka(totalIncome-totalExpense)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    `;
+    refreshIcons();
+  }
 }
 
+/* ফিচার ৪ — বছরের সারসংক্ষেপ */
+function populateAnnualSummaryYearSelect(){
+  const sel = document.getElementById('annualSummaryYear');
+  if(!sel) return;
+  const years = new Set(state.entries.filter(e => e.date).map(e => e.date.slice(0,4)));
+  years.add(String(new Date().getFullYear()));
+  const sortedYears = [...years].sort((a,b) => b - a);
+  const prevValue = sel.value;
+  sel.innerHTML = sortedYears.map(y => `<option value="${y}">${bnDigits(y)}</option>`).join('');
+  if(sortedYears.includes(prevValue)){
+    sel.value = prevValue;
+  } else {
+    sel.value = String(new Date().getFullYear());
+  }
+}
+
+function renderAnnualSummary(){
+  const content = document.getElementById('annualSummaryContent');
+  const sel = document.getElementById('annualSummaryYear');
+  if(!content || !sel) return;
+  const year = sel.value;
+
+  const yearEntries = state.entries.filter(e => e.date && e.date.slice(0,4) === year);
+  const totalExpense = yearEntries.filter(e => e.kind === 'expense').reduce((s,e) => s+e.amount, 0);
+  const totalIncome  = yearEntries.filter(e => e.kind === 'income').reduce((s,e) => s+e.amount, 0);
+  const totalReceivable = yearEntries.filter(e => e.kind === 'receivable').reduce((s,e) => s+e.amount, 0);
+  const totalPayable = yearEntries.filter(e => e.kind === 'payable').reduce((s,e) => s+e.amount, 0);
+
+  // সবচেয়ে বেশি খরচ হওয়া মাস
+  const monthTotals = {};
+  yearEntries.filter(e => e.kind === 'expense').forEach(e => {
+    const m = e.date.slice(0,7);
+    monthTotals[m] = (monthTotals[m] || 0) + e.amount;
+  });
+  const topMonthEntry = Object.entries(monthTotals).sort((a,b) => b[1]-a[1])[0];
+  const topMonthLabel = topMonthEntry ? MONTHS_BN[Number(topMonthEntry[0].slice(5,7)) - 1] : '—';
+
+  // সবচেয়ে বেশি খরচ হওয়া ক্যাটাগরি
+  const catTotals = {};
+  yearEntries.filter(e => e.kind === 'expense').forEach(e => {
+    const c = e.category || 'অন্যান্য';
+    catTotals[c] = (catTotals[c] || 0) + e.amount;
+  });
+  const topCatEntry = Object.entries(catTotals).sort((a,b) => b[1]-a[1])[0];
+
+  const avgMonthly = totalExpense > 0 ? totalExpense / Math.max(1, Object.keys(monthTotals).length) : 0;
+
+  const stats = [
+    { label: `${bnDigits(year)} সালের মোট খরচ`, value: taka(totalExpense), cls: 'expense' },
+    { label: `${bnDigits(year)} সালের মোট আয়`, value: taka(totalIncome), cls: 'income' },
+    { label: 'সর্বমোট পাই', value: taka(totalReceivable), cls: 'income' },
+    { label: 'সর্বমোট পাওনা', value: taka(totalPayable), cls: 'expense' },
+    { label: 'সবচেয়ে বেশি খরচের মাস', value: topMonthEntry ? `${topMonthLabel} (${taka(topMonthEntry[1])})` : '—', cls: '' },
+    { label: 'সবচেয়ে বেশি খরচের খাত', value: topCatEntry ? `${escapeHtml(topCatEntry[0])} (${taka(topCatEntry[1])})` : '—', cls: '' },
+    { label: 'গড় মাসিক খরচ', value: taka(Math.round(avgMonthly)), cls: '' },
+  ];
+
+  if(yearEntries.length === 0){
+    content.innerHTML = `<div class="empty-state">${bnDigits(year)} সালের কোনো তথ্য পাওয়া যায়নি।</div>`;
+    return;
+  }
+
+  content.innerHTML = stats.map(s => `
+    <div class="annual-stat">
+      <div class="annual-stat-label">${s.label}</div>
+      <div class="annual-stat-value ${s.cls}">${s.value}</div>
+    </div>
+  `).join('');
+}
+
+document.addEventListener('change', e => {
+  if(e.target && e.target.id === 'annualSummaryYear'){
+    renderAnnualSummary();
+  }
+});
+
 function renderCharts(){
+  populateAnnualSummaryYearSelect();
+  renderAnnualSummary();
+
   if(typeof Chart === 'undefined') return;
 
   // দৈনন্দিন খরচের চার্ট (সাম্প্রতিক N দিন)
   const dailyLabels = [];
-  const dailyData = [];
+  const dailyData = [];         // মোট খরচ (displayable)
+  const dailyForLimitData = []; // লিমিট-যোগ্য খরচ (limit তুলনার জন্য)
   const dailyLimitData = [];
   const dailyColors = [];
+  const dailyDateStrs = [];
+
   for(let i = dailyChartRangeDays - 1; i >= 0; i--){
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dateStr = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
     const total = getDayExpenseTotal(dateStr);
+    const forLimit = getDayExpenseForLimit(dateStr);
     const limit = getDailyLimitForDate(dateStr);
     dailyLabels.push(bnDigits(d.getDate()) + ' ' + MONTHS_BN[d.getMonth()].slice(0,3));
     dailyData.push(total);
+    dailyForLimitData.push(forLimit);
     dailyLimitData.push(limit > 0 ? limit : null);
     dailyColors.push(isDayOverLimit(dateStr) ? '#7C3B3B' : '#2B3D2F');
+    dailyDateStrs.push(dateStr);
   }
 
   const ctxD = document.getElementById('dailyChart');
@@ -1895,11 +2684,22 @@ function renderCharts(){
       labels: dailyLabels,
       datasets: [
         {
-          label: 'দৈনিক খরচ',
+          label: 'মোট খরচ',
           data: dailyData,
           backgroundColor: dailyColors,
           borderRadius: 5,
           order: 2
+        },
+        {
+          label: 'লিমিট-যোগ্য খরচ',
+          data: dailyForLimitData,
+          backgroundColor: 'transparent',
+          borderColor: dailyColors.map(c => c),
+          borderWidth: 2,
+          type: 'bar',
+          borderRadius: 3,
+          order: 3,
+          hidden: true // legend থেকে টগল করা যাবে
         },
         {
           label: 'দৈনিক লিমিট',
@@ -1917,7 +2717,39 @@ function renderCharts(){
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: true, position: 'bottom',
+          labels: { font: { family: "'Hind Siliguri', sans-serif" }, boxWidth: 12, padding: 12 } },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const idx = items[0].dataIndex;
+              return dailyDateStrs[idx] ? formatDateDMY(dailyDateStrs[idx]) : items[0].label;
+            },
+            label: (item) => {
+              if(item.dataset.label === 'মোট খরচ')
+                return ` মোট খরচ: ${taka(item.raw)}`;
+              if(item.dataset.label === 'লিমিট-যোগ্য খরচ')
+                return ` লিমিটে গণ্য: ${taka(item.raw)}`;
+              if(item.dataset.label === 'দৈনিক লিমিট' && item.raw != null)
+                return ` দৈনিক লিমিট: ${taka(item.raw)}`;
+              return null;
+            },
+            afterBody: (items) => {
+              const idx = items[0].dataIndex;
+              const limit = dailyLimitData[idx];
+              const forLimit = dailyForLimitData[idx];
+              if(limit && limit > 0){
+                const diff = limit - forLimit;
+                return diff >= 0
+                  ? [`  বাকি: ${taka(diff)}`]
+                  : [`  অতিক্রম: ${taka(Math.abs(diff))}`];
+              }
+              return [];
+            }
+          }
+        }
+      },
       scales: {
         x: { ticks: { font: { family: "'Hind Siliguri', sans-serif" }, maxRotation: 0, autoSkip: true } },
         y: { ticks: { callback: v => bnDigits(v), font: { family: "'Hind Siliguri', sans-serif" } } }
@@ -2005,20 +2837,41 @@ document.getElementById('downloadPdfBtn').addEventListener('click', () => {
         <td>${formatDateDMY(e.date)}</td>
         <td>${formatTimeBn(e.time)}</td>
         <td>${entryKindLabel(e.kind)}</td>
-        <td>${escapeHtml(e.kind === 'expense' ? (e.category || '') : (e.person || ''))}</td>
+        <td>${escapeHtml(e.kind === 'expense' ? (e.category||'') : e.kind==='income'?(e.incomeSource||''):(e.person||''))}</td>
         <td>${escapeHtml(e.note || '')}</td>
         <td>${taka(e.amount)}</td>
       </tr>
     `).join('');
   }
 
-  const totalExpense = rows.filter(e=>e.kind==='expense').reduce((s,e)=>s+e.amount,0);
+  const expenseRows = rows.filter(e=>e.kind==='expense');
+  const incomeRows  = rows.filter(e=>e.kind==='income');
+  const totalExpense = expenseRows.reduce((s,e)=>s+e.amount,0);
+  const totalIncome  = incomeRows.reduce((s,e)=>s+e.amount,0);
   const totalReceivable = rows.filter(e=>e.kind==='receivable').reduce((s,e)=>s+e.amount,0);
   const totalPayable = rows.filter(e=>e.kind==='payable').reduce((s,e)=>s+e.amount,0);
-  let summaryParts = [`মোট খরচ: ${taka(totalExpense)}`];
+
+  // বিস্তারিত সারাংশ (দৈনিক লিমিট তথ্য সহ)
+  const datesWithExpense = [...new Set(expenseRows.map(e=>e.date))].sort();
+  let overLimitDays=0, totalOverLimit=0, totalLimitEligible=0;
+  datesWithExpense.forEach(d=>{
+    const lim=getDailyLimitForDate(d);
+    const fl=getDayExpenseForLimit(d);
+    totalLimitEligible+=fl;
+    if(lim>0&&!state.dayExceptions?.[d]&&fl>lim){overLimitDays++;totalOverLimit+=fl-lim;}
+  });
+
+  let summaryParts = [
+    `মোট খরচ: ${taka(totalExpense)}`,
+    `লিমিট-যোগ্য খরচ: ${taka(totalLimitEligible)}`,
+  ];
+  if(overLimitDays>0) summaryParts.push(`লিমিট অতিক্রান্ত দিন: ${bnDigits(overLimitDays)} (অতিরিক্ত ${taka(totalOverLimit)})`);
+  if(totalIncome>0) summaryParts.push(`মোট আয়: ${taka(totalIncome)}`);
   if(includeReceivable) summaryParts.push(`মোট পাই: ${taka(totalReceivable)}`);
   if(includePayable) summaryParts.push(`মোট পাওনা: ${taka(totalPayable)}`);
-  document.getElementById('printSummary').innerHTML = summaryParts.join(' &nbsp;|&nbsp; ');
+  summaryParts.push(`নিট (আয় − খরচ): ${taka(totalIncome-totalExpense)}`);
+
+  document.getElementById('printSummary').innerHTML = summaryParts.join('<br>');
 
   window.print();
 });
@@ -2058,6 +2911,47 @@ document.getElementById('downloadCsvBtn').addEventListener('click', () => {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   toast('CSV ফাইল ডাউনলোড হয়েছে।');
+});
+
+/* ফিচার ২৩ — Excel (.xlsx) এক্সপোর্ট */
+document.getElementById('downloadExcelBtn').addEventListener('click', () => {
+  renderReportTable();
+  const rows = currentFilteredEntries;
+  if(rows.length === 0){ toast('ডাউনলোডের জন্য কোনো তথ্য পাওয়া যায়নি।'); return; }
+
+  if(typeof XLSX === 'undefined'){ toast('Excel লাইব্রেরি লোড হয়নি — কিছুক্ষণ পর আবার চেষ্টা করুন।'); return; }
+
+  const wsData = [
+    ['তারিখ','সময়','ধরন','খাত/ব্যক্তি/উৎস','নোট','পরিমাণ (৳)']
+  ];
+  rows.forEach(e => {
+    wsData.push([
+      formatDateDMY(e.date),
+      e.time ? formatTimeBn(e.time) : 'উল্লেখ নেই',
+      entryKindLabel(e.kind),
+      e.kind === 'expense' ? (e.category || '') :
+        e.kind === 'income' ? (e.incomeSource || '') : (e.person || ''),
+      e.note || '',
+      e.amount
+    ]);
+  });
+
+  const totalExpense  = rows.filter(e=>e.kind==='expense').reduce((s,e)=>s+e.amount,0);
+  const totalIncome   = rows.filter(e=>e.kind==='income').reduce((s,e)=>s+e.amount,0);
+  const totalReceivable = rows.filter(e=>e.kind==='receivable').reduce((s,e)=>s+e.amount,0);
+  const totalPayable  = rows.filter(e=>e.kind==='payable').reduce((s,e)=>s+e.amount,0);
+  wsData.push([]);
+  wsData.push(['সারাংশ','','','','','']);
+  wsData.push(['মোট খরচ','','','','',totalExpense]);
+  wsData.push(['মোট আয়','','','','',totalIncome]);
+  wsData.push(['মোট পাই','','','','',totalReceivable]);
+  wsData.push(['মোট পাওনা','','','','',totalPayable]);
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'হিসাব স্টেটমেন্ট');
+  XLSX.writeFile(wb, `mahims-ledger-${todayStr()}.xlsx`);
+  toast('Excel ফাইল ডাউনলোড হয়েছে।');
 });
 
 function csvEscape(val){
@@ -2106,7 +3000,7 @@ function renderContacts(){
     return;
   }
   wrap.innerHTML = list.map(c => `
-    <div class="entry-row">
+    <div class="entry-row" data-id="${c.id}">
       <div class="entry-main">
         <span class="entry-title">${escapeHtml(c.name)}</span>
         <span class="entry-sub">${escapeHtml(c.phone)}</span>
@@ -2134,6 +3028,13 @@ function renderContacts(){
     });
   }));
   refreshIcons();
+  enableSwipeToDelete(wrap, contactId => {
+    openConfirm('কন্টাক্ট ডিলিট করুন', 'এই কন্টাক্টটি স্থায়ীভাবে মুছে যাবে।', () => {
+      state.contacts = state.contacts.filter(c => c.id !== contactId);
+      saveState();
+      renderAll();
+    });
+  });
 }
 
 /* ----- গুগল কন্টাক্টস CSV ইম্পোর্ট ----- */
@@ -2320,7 +3221,11 @@ function loadSettingsForm(){
   document.getElementById('settingMonthlyBudget').value = state.settings.monthlyBudget || '';
   document.getElementById('reminderEnabled').checked = state.settings.reminderEnabled;
   document.getElementById('reminderTime').value = state.settings.reminderTime;
+  document.getElementById('settingCurrency').value = state.settings.currency || 'BDT';
   renderProfilePhoto();
+  applyTheme(state.settings.theme || 'light');
+  applyAccentColor(state.settings.accentColor || 'B08D4F');
+  updatePinStatusUI();
 }
 
 function renderProfilePhoto(){
@@ -2394,6 +3299,7 @@ document.getElementById('saveSettingsBtn').addEventListener('click', () => {
   state.settings.monthlyBudget = Math.max(0, Number(document.getElementById('settingMonthlyBudget').value) || 0);
   state.settings.reminderEnabled = document.getElementById('reminderEnabled').checked;
   state.settings.reminderTime = document.getElementById('reminderTime').value || '21:00';
+  state.settings.currency = document.getElementById('settingCurrency').value || 'BDT';
   saveState();
   renderAll();
   toast('সেটিংস সংরক্ষিত হয়েছে।');
@@ -2592,7 +3498,7 @@ function renderDayDetail(dateStr){
     list.innerHTML = `<div class="empty-state">এই দিনের কোনো খরচের তথ্য নেই।</div>`;
   } else {
     list.innerHTML = dayEntries.map(e => `
-      <div class="entry-row">
+      <div class="entry-row" data-id="${e.id}">
         <div class="entry-main">
           <span class="entry-title">${escapeHtml(entryTitle(e))}${exclusionBadges(e)}</span>
           <span class="entry-sub">${entryMetaLine(e)}</span>
@@ -2615,6 +3521,7 @@ function renderDayDetail(dateStr){
   }
 
   refreshIcons();
+  enableSwipeToDelete(list, deleteEntry);
 }
 
 document.getElementById('calendarGrid').addEventListener('click', e => {
@@ -2759,6 +3666,327 @@ document.getElementById('calcUseAsExpenseBtn').addEventListener('click', () => {
 });
 
 /* =====================================================================
+   ফিচার ৭ — রিকারিং (পুনরাবৃত্ত) এন্ট্রি
+   ===================================================================== */
+function populateRecurringFormSelects(){
+  const catSel = document.getElementById('recurringCategory');
+  const incSel = document.getElementById('recurringIncomeSource');
+  if(catSel) catSel.innerHTML = state.categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if(incSel) incSel.innerHTML = INCOME_SOURCES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+}
+
+document.getElementById('recurringKind').addEventListener('change', e => {
+  const isIncome = e.target.value === 'income';
+  document.getElementById('recurringCategoryRow').style.display = isIncome ? 'none' : '';
+  document.getElementById('recurringIncomeSourceRow').style.display = isIncome ? '' : 'none';
+});
+
+document.getElementById('addRecurringBtn').addEventListener('click', () => {
+  const kind = document.getElementById('recurringKind').value;
+  const amount = Number(document.getElementById('recurringAmount').value);
+  const day = Number(document.getElementById('recurringDay').value);
+  const note = document.getElementById('recurringNote').value.trim();
+  if(!amount || amount <= 0){ toast('সঠিক পরিমাণ দিন।'); return; }
+  if(!day || day < 1 || day > 28){ toast('তারিখ ১ থেকে ২৮-এর মধ্যে দিন (যাতে প্রতি মাসেই এই তারিখ থাকে)।'); return; }
+
+  const item = {
+    id: uid(), kind, amount, note,
+    category: kind === 'expense' ? document.getElementById('recurringCategory').value : null,
+    incomeSource: kind === 'income' ? document.getElementById('recurringIncomeSource').value : null,
+    dayOfMonth: day,
+    lastGeneratedMonth: '',
+    active: true
+  };
+  state.recurring.push(item);
+  saveState();
+  document.getElementById('recurringAmount').value = '';
+  document.getElementById('recurringDay').value = '';
+  document.getElementById('recurringNote').value = '';
+  renderRecurringList();
+  toast('রিকারিং এন্ট্রি যুক্ত হয়েছে।');
+});
+
+function renderRecurringList(){
+  const wrap = document.getElementById('recurringList');
+  if(!wrap) return;
+  populateRecurringFormSelects();
+  if(state.recurring.length === 0){
+    wrap.innerHTML = `<div class="empty-state">এখনো কোনো রিকারিং এন্ট্রি নেই।</div>`;
+    return;
+  }
+  wrap.innerHTML = state.recurring.map(r => `
+    <div class="recurring-item">
+      <div class="recurring-item-main">
+        <span class="recurring-item-title">${r.kind === 'income' ? escapeHtml(r.incomeSource || '') : escapeHtml(r.category || '')} — ${taka(r.amount)}</span>
+        <span class="recurring-item-sub">প্রতি মাসের ${bnDigits(r.dayOfMonth)} তারিখে${r.note ? ' · ' + escapeHtml(r.note) : ''}</span>
+      </div>
+      <div class="recurring-item-actions">
+        <button class="recurring-toggle ${r.active ? 'active' : ''}" data-id="${r.id}" title="চালু/বন্ধ করুন"></button>
+        <button class="icon-btn danger" data-action="delete-recurring" data-id="${r.id}" title="ডিলিট"><i data-lucide="trash-2"></i></button>
+      </div>
+    </div>
+  `).join('');
+
+  wrap.querySelectorAll('.recurring-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = state.recurring.find(r => r.id === btn.dataset.id);
+      if(item){ item.active = !item.active; saveState(); renderRecurringList(); }
+    });
+  });
+  wrap.querySelectorAll('[data-action="delete-recurring"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openConfirm('রিকারিং এন্ট্রি ডিলিট', 'এই রিকারিং এন্ট্রিটি ডিলিট করতে চান? আগে তৈরি হওয়া এন্ট্রিগুলো প্রভাবিত হবে না।', () => {
+        state.recurring = state.recurring.filter(r => r.id !== btn.dataset.id);
+        saveState();
+        renderRecurringList();
+      });
+    });
+  });
+}
+
+// অ্যাপ চালু হওয়ার সময় চেক করা — এই মাসের জন্য এখনো তৈরি না হওয়া রিকারিং এন্ট্রি স্বয়ংক্রিয়ভাবে তৈরি করা
+function generateRecurringEntries(){
+  if(!state.recurring || state.recurring.length === 0) return;
+  const today = new Date();
+  const thisMonth = today.getFullYear() + '-' + pad(today.getMonth()+1);
+  const todayDate = today.getDate();
+  let generated = false;
+
+  state.recurring.forEach(r => {
+    if(!r.active) return;
+    if(r.lastGeneratedMonth === thisMonth) return; // এই মাসে আগেই তৈরি হয়েছে
+    if(todayDate < r.dayOfMonth) return; // এখনো সেই তারিখ আসেনি
+
+    const dateStr = thisMonth + '-' + pad(r.dayOfMonth);
+    state.entries.unshift({
+      id: uid(),
+      kind: r.kind,
+      category: r.kind === 'expense' ? r.category : null,
+      incomeSource: r.kind === 'income' ? r.incomeSource : null,
+      person: null, contactName: null, contactPhone: null,
+      amount: r.amount,
+      date: dateStr,
+      time: '',
+      note: (r.note || '') + ' (রিকারিং)',
+      isTour: false, tourId: null, tourCategory: null,
+      excludeFromDailyTotal: false, excludeFromDailyLimit: false,
+      excludeFromMonthlyTotal: false, excludeFromMonthlyLimit: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    r.lastGeneratedMonth = thisMonth;
+    generated = true;
+  });
+
+  if(generated){
+    saveState();
+    toast('এই মাসের রিকারিং এন্ট্রি স্বয়ংক্রিয়ভাবে যুক্ত হয়েছে।');
+  }
+}
+
+/* =====================================================================
+   ফিচার ১০ — সঞ্চয় লক্ষ্য (Savings Goals)
+   ===================================================================== */
+document.getElementById('addGoalBtn').addEventListener('click', () => {
+  const title = document.getElementById('goalTitle').value.trim();
+  const target = Number(document.getElementById('goalTarget').value);
+  const date = document.getElementById('goalDate').value;
+  if(!title){ toast('লক্ষ্যের নাম দিন।'); return; }
+  if(!target || target <= 0){ toast('সঠিক লক্ষ্য পরিমাণ দিন।'); return; }
+
+  state.savingsGoals.push({
+    id: uid(), title, targetAmount: target, savedAmount: 0,
+    targetDate: date || null, createdAt: new Date().toISOString()
+  });
+  saveState();
+  document.getElementById('goalTitle').value = '';
+  document.getElementById('goalTarget').value = '';
+  document.getElementById('goalDate').value = '';
+  renderGoals();
+  toast('সঞ্চয় লক্ষ্য যুক্ত হয়েছে।');
+});
+
+function goalCardHtml(g){
+  const pct = Math.min(100, (g.savedAmount / g.targetAmount) * 100);
+  const completed = g.savedAmount >= g.targetAmount;
+  return `
+    <div class="goal-item" data-id="${g.id}">
+      <div class="goal-item-head">
+        <span class="goal-item-title">${escapeHtml(g.title)}</span>
+        ${completed ? `<span class="goal-completed-badge"><i data-lucide="check-circle-2"></i> সম্পন্ন</span>` : (g.targetDate ? `<span class="goal-item-date">${formatDateDMY(g.targetDate)}</span>` : '')}
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="goal-progress-row">
+        <span>জমা হয়েছে: ${taka(g.savedAmount)}</span>
+        <span>লক্ষ্য: ${taka(g.targetAmount)}</span>
+      </div>
+      ${!completed ? `
+        <div class="goal-add-amount-row">
+          <input type="number" min="0" step="1" placeholder="যত টাকা জমা করলেন" class="goal-add-input" data-id="${g.id}" />
+          <button type="button" class="goal-add-btn" data-id="${g.id}">জমা করুন</button>
+        </div>
+      ` : ''}
+      <div class="entry-actions" style="margin-top:.5rem;">
+        <button class="icon-btn danger" data-action="delete-goal" data-id="${g.id}" title="ডিলিট"><i data-lucide="trash-2"></i></button>
+      </div>
+    </div>
+  `;
+}
+
+function wireGoalCardEvents(container){
+  container.querySelectorAll('.goal-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = container.querySelector(`.goal-add-input[data-id="${btn.dataset.id}"]`);
+      const val = Number(input.value);
+      if(!val || val <= 0) return;
+      const goal = state.savingsGoals.find(g => g.id === btn.dataset.id);
+      if(goal){
+        goal.savedAmount = Math.min(goal.targetAmount, goal.savedAmount + val);
+        saveState();
+        renderGoals();
+        toast('সঞ্চয়ে যুক্ত হয়েছে।');
+      }
+    });
+  });
+  container.querySelectorAll('[data-action="delete-goal"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openConfirm('লক্ষ্য ডিলিট', 'এই সঞ্চয় লক্ষ্যটি ডিলিট করতে চান?', () => {
+        state.savingsGoals = state.savingsGoals.filter(g => g.id !== btn.dataset.id);
+        saveState();
+        renderGoals();
+      });
+    });
+  });
+}
+
+function renderGoals(){
+  const wrap = document.getElementById('goalsList');
+  const dashCard = document.getElementById('dashboardGoalsCard');
+  const dashList = document.getElementById('dashboardGoalsList');
+
+  if(wrap){
+    if(state.savingsGoals.length === 0){
+      wrap.innerHTML = `<div class="empty-state">এখনো কোনো সঞ্চয় লক্ষ্য নেই।</div>`;
+    } else {
+      wrap.innerHTML = state.savingsGoals.map(goalCardHtml).join('');
+      wireGoalCardEvents(wrap);
+    }
+  }
+  if(dashCard && dashList){
+    if(state.savingsGoals.length === 0){
+      dashCard.style.display = 'none';
+    } else {
+      dashCard.style.display = 'block';
+      dashList.innerHTML = state.savingsGoals.slice(0,3).map(goalCardHtml).join('');
+      wireGoalCardEvents(dashList);
+    }
+  }
+  refreshIcons();
+}
+
+/* =====================================================================
+   ফিচার ১১ — কুইক-অ্যাড টেমপ্লেট
+   ===================================================================== */
+function populateTemplateFormSelects(){
+  const catSel = document.getElementById('templateCategory');
+  const incSel = document.getElementById('templateIncomeSource');
+  if(catSel) catSel.innerHTML = state.categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if(incSel) incSel.innerHTML = INCOME_SOURCES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+}
+
+document.getElementById('templateKind').addEventListener('change', e => {
+  const isIncome = e.target.value === 'income';
+  document.getElementById('templateCategoryRow').style.display = isIncome ? 'none' : '';
+  document.getElementById('templateIncomeSourceRow').style.display = isIncome ? '' : 'none';
+});
+
+document.getElementById('addTemplateBtn').addEventListener('click', () => {
+  const label = document.getElementById('templateLabel').value.trim();
+  const kind = document.getElementById('templateKind').value;
+  const amount = Number(document.getElementById('templateAmount').value);
+  const note = document.getElementById('templateNote').value.trim();
+  if(!label){ toast('টেমপ্লেটের নাম দিন।'); return; }
+  if(!amount || amount <= 0){ toast('সঠিক পরিমাণ দিন।'); return; }
+
+  state.quickTemplates.push({
+    id: uid(), label, kind,
+    category: kind === 'expense' ? document.getElementById('templateCategory').value : null,
+    incomeSource: kind === 'income' ? document.getElementById('templateIncomeSource').value : null,
+    amount, note
+  });
+  saveState();
+  document.getElementById('templateLabel').value = '';
+  document.getElementById('templateAmount').value = '';
+  document.getElementById('templateNote').value = '';
+  renderTemplatesList();
+  toast('টেমপ্লেট যুক্ত হয়েছে।');
+});
+
+function renderTemplatesList(){
+  const wrap = document.getElementById('templatesList');
+  if(!wrap) return;
+  populateTemplateFormSelects();
+  if(state.quickTemplates.length === 0){
+    wrap.innerHTML = `<div class="empty-state">এখনো কোনো টেমপ্লেট নেই।</div>`;
+  } else {
+    wrap.innerHTML = state.quickTemplates.map(t => `
+      <div class="template-item">
+        <div class="template-item-main">
+          <span class="template-item-title">${escapeHtml(t.label)}</span>
+          <span class="template-item-sub">${t.kind === 'income' ? 'আয়' : 'খরচ'} · ${taka(t.amount)}${t.note ? ' · ' + escapeHtml(t.note) : ''}</span>
+        </div>
+        <div class="template-item-actions">
+          <button class="icon-btn danger" data-action="delete-template" data-id="${t.id}" title="ডিলিট"><i data-lucide="trash-2"></i></button>
+        </div>
+      </div>
+    `).join('');
+    wrap.querySelectorAll('[data-action="delete-template"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.quickTemplates = state.quickTemplates.filter(t => t.id !== btn.dataset.id);
+        saveState();
+        renderTemplatesList();
+        renderQuickTemplatesRow();
+        toast('টেমপ্লেট ডিলিট হয়েছে।');
+      });
+    });
+  }
+  renderQuickTemplatesRow();
+}
+
+function renderQuickTemplatesRow(){
+  const row = document.getElementById('quickTemplatesRow');
+  if(!row) return;
+  if(!state.quickTemplates || state.quickTemplates.length === 0){
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = 'flex';
+  row.innerHTML = state.quickTemplates.map(t => `
+    <button type="button" class="quick-template-btn" data-id="${t.id}">
+      <i data-lucide="zap"></i> ${escapeHtml(t.label)} (${taka(t.amount)})
+    </button>
+  `).join('');
+  row.querySelectorAll('.quick-template-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = state.quickTemplates.find(tt => tt.id === btn.dataset.id);
+      if(!t) return;
+      document.querySelectorAll('#entryTypeControl .seg').forEach(s => s.classList.toggle('active', s.dataset.value === t.kind));
+      currentEntryType = t.kind;
+      updateEntryFormForType();
+      if(t.kind === 'expense'){
+        entryCategorySel.value = t.category || state.categories[0];
+      } else if(t.kind === 'income'){
+        entryIncomeSourceSel.value = t.incomeSource || INCOME_SOURCES[0];
+      }
+      entryAmountInput.value = t.amount;
+      entryNoteInput.value = t.note || '';
+      toast(`"${t.label}" টেমপ্লেট থেকে ফর্ম পূরণ হয়েছে — যাচাই করে সংরক্ষণ করুন।`);
+    });
+  });
+  refreshIcons();
+}
+
+/* =====================================================================
    নোটস
    ===================================================================== */
 function renderNotes(){
@@ -2877,7 +4105,166 @@ function renderAll(){
   renderContacts();
   renderArchive();
   renderNotes();
+  renderRecurringList();
+  renderGoals();
+  renderTemplatesList();
+  renderGuide();
   refreshIcons();
+}
+
+/* =====================================================================
+   ব্যবহার-বিধি (গাইড) পেজ
+   ===================================================================== */
+const GUIDE_SECTIONS = [
+  {
+    icon: 'layout-dashboard', title: 'ড্যাশবোর্ড',
+    body: `ড্যাশবোর্ডে অ্যাপ খোলার সাথেই আজকের মোট খরচ, মোট পাই (অন্যের কাছে পাওনা টাকা), মোট পাওনা (আপনি অন্যকে যা দিতে হবে), এই মাসের মোট খরচ ও মোট আয় — এই পাঁচটি সংখ্যা একনজরে দেখা যায়। প্রতিটি কার্ডে ট্যাপ করলে সংশ্লিষ্ট বিস্তারিত পেজে চলে যাবেন। নিচে "ইনসাইটস" কার্ডে অ্যাপ স্বয়ংক্রিয়ভাবে আপনার খরচের ধরন বিশ্লেষণ করে জানাবে — গত মাসের তুলনায় খরচ বাড়লো বা কমলো কিনা, কোন খাতে সবচেয়ে বেশি খরচ হয়েছে, কোন দিনে সবচেয়ে বেশি খরচ হয়েছে, এবং গড় দৈনিক/সাপ্তাহিক খরচ কত। সঞ্চয় লক্ষ্য থাকলে তার অগ্রগতিও এখানে দেখা যাবে। সবচেয়ে নিচে মাসিক বাজেট ও দৈনিক লিমিটের প্রোগ্রেস বার আছে।`
+  },
+  {
+    icon: 'pencil-line', title: 'নতুন এন্ট্রি যুক্ত করা',
+    body: `"নতুন এন্ট্রি" পেজে চারটি ধরনের এন্ট্রি যুক্ত করা যায়: খরচ, আয়, পাই (অন্যের কাছ থেকে টাকা পাবেন) ও পাওনা (আপনাকে অন্যকে টাকা দিতে হবে)। খরচের জন্য একটি খাত (ক্যাটাগরি) বাছতে হয়, আয়ের জন্য আয়ের উৎস (বেতন, ব্যবসা ইত্যাদি), আর পাই/পাওনার জন্য ব্যক্তির নাম লিখতে হয় (চাইলে কন্টাক্ট থেকেও বেছে নেওয়া যায়)। প্রতিটি এন্ট্রিতে তারিখ, সময় (না জানলে "সময় উল্লেখ নেই" টিক দিন), ও একটি নোট যুক্ত করা যায়। উপরে থাকা কুইক-টেমপ্লেট বাটনে ট্যাপ করলে প্রায়ই করা এন্ট্রি (যেমন "দুপুরের খাবার ৮০ টাকা") এক ট্যাপেই ফর্মে বসে যাবে। খরচের ক্ষেত্রে চারটি ঐচ্ছিক চেকবক্স আছে — এই এন্ট্রি দৈনিক/মাসিক মোট বা লিমিটের হিসাবে যুক্ত হবে কিনা, যেকোনো কম্বিনেশনে বেছে নেওয়া যায়। ট্যুরের খরচ হলে "ট্যুর সম্পর্কিত খরচ" টিক দিলে আলাদা ট্যুর হিসাবেও যুক্ত হয়ে যাবে।`
+  },
+  {
+    icon: 'gauge', title: 'দৈনিক লিমিট ও দৈনন্দিন খরচ',
+    body: `"দৈনন্দিন খরচ" পেজে একটি মাসিক ক্যালেন্ডার দেখা যায় — প্রতিদিনের মোট খরচ ছোট করে দেখানো থাকে। দৈনিক লিমিট ঠিক করে রাখলে, কোনো দিনের খরচ লিমিট পার করলে সেই দিনটি লাল রঙে চিহ্নিত হয়ে যাবে (ক্যালেন্ডার, ড্যাশবোর্ড ও তালিকায় সব জায়গায়)। লিমিট পরিবর্তনের সময় দুটো অপশন থাকে — "মাসিক বাজেট অনুযায়ী" বাছলে মাসিক বাজেটকে সেই মাসের দিন সংখ্যা দিয়ে ভাগ করে স্বয়ংক্রিয়ভাবে দৈনিক লিমিট ঠিক হয়ে যায়, অথবা "নিজে নির্ধারণ করুন" দিয়ে নিজের ইচ্ছামতো অংক বসানো যায়। নতুন লিমিট "আজ থেকে কার্যকর" বা "আগামীকাল থেকে" — দুইভাবে সেট করা যায়; আগের তারিখগুলো তখনকার লিমিট অনুযায়ীই রঙ ধরে রাখবে। কোনো দিনে ক্লিক করলে সেদিনের বিস্তারিত এন্ট্রি দেখা যাবে, এবং চাইলে সেই দিনটিকে "লিমিটের বাইরে" রাখার অপশনও (এক্সসেপশন) আছে।`
+  },
+  {
+    icon: 'target', title: 'মাসিক বাজেট ও খাতভিত্তিক বাজেট',
+    body: `সেটিংস থেকে একটি সার্বিক মাসিক বাজেট ঠিক করা যায়, যা ড্যাশবোর্ডে প্রোগ্রেস বারে দেখা যাবে। এর পাশাপাশি "ক্যাটাগরি" পেজে প্রতিটি খাতের (যেমন খাবার, যাতায়াত) জন্য আলাদা মাসিক বাজেটও ঠিক করা যায় — সেই খাতে এই মাসে কত খরচ হয়েছে, বাজেটের কতটুকু বাকি বা পার হয়েছে তা প্রোগ্রেস বারে দেখাবে।`
+  },
+  {
+    icon: 'repeat', title: 'রিকারিং (পুনরাবৃত্ত) এন্ট্রি',
+    body: `মাসিক ভাড়া, বিল, বেতনের মতো প্রতি মাসে একই অংকের লেনদেনের জন্য সেটিংস পেজ থেকে "রিকারিং এন্ট্রি" তৈরি করা যায়। ধরন (খরচ/আয়), খাত বা উৎস, পরিমাণ এবং মাসের কোন তারিখে (১-২৮ এর মধ্যে) তৈরি হবে তা ঠিক করে দিলে, সেই তারিখ এলে অ্যাপ খোলার সময় স্বয়ংক্রিয়ভাবে একটি এন্ট্রি তৈরি হয়ে যাবে — প্রতি মাসে আবার নতুন করে যুক্ত করার প্রয়োজন নেই। যেকোনো সময় চালু/বন্ধ বা ডিলিট করা যায়।`
+  },
+  {
+    icon: 'piggy-bank', title: 'সঞ্চয় লক্ষ্য',
+    body: `সেটিংস থেকে একটি সঞ্চয়ের লক্ষ্য (যেমন "নতুন ফোন কেনা — ৩০,০০০ টাকা") তৈরি করা যায়, ঐচ্ছিকভাবে একটি লক্ষ্য তারিখও দেওয়া যায়। যখনই কিছু টাকা জমা করবেন, "জমা করুন" বাটনে সেই পরিমাণ লিখে যুক্ত করলে প্রোগ্রেস বার এগিয়ে যাবে। লক্ষ্য পূর্ণ হলে "সম্পন্ন" ব্যাজ দেখাবে। ড্যাশবোর্ডেও সক্রিয় লক্ষ্যগুলো দেখা যায়।`
+  },
+  {
+    icon: 'zap', title: 'কুইক-অ্যাড টেমপ্লেট',
+    body: `প্রায়ই করা একই রকম এন্ট্রি (যেমন প্রতিদিনের নাস্তার খরচ) বারবার টাইপ না করে, সেটিংস থেকে একটি টেমপ্লেট বানিয়ে রাখা যায়। "নতুন এন্ট্রি" পেজের উপরে এই টেমপ্লেট বাটনগুলো দেখা যাবে — ট্যাপ করলেই ফর্ম স্বয়ংক্রিয়ভাবে পূরণ হয়ে যাবে, শুধু সংরক্ষণ করলেই এন্ট্রি যুক্ত হয়ে যাবে।`
+  },
+  {
+    icon: 'hand-coins', title: 'পাই ও পাওনা',
+    body: `"পাই ও পাওনা" পেজে কে কত টাকা পাবেন আর কাকে কত দিতে হবে তা ব্যক্তি ধরে গ্রুপ করে দেখানো হয়। কন্টাক্ট লিংক করা থাকলে ফোন নম্বরও দেখা যাবে। এন্ট্রি যুক্ত করার সময় ঐচ্ছিকভাবে একটি "ফেরত দেওয়ার/নেওয়ার তারিখ" দেওয়া যায় — সেই তারিখ পার হয়ে গেলে ড্যাশবোর্ডের ইনসাইটসে রিমাইন্ডার দেখাবে এবং তালিকায় লাল রঙে চিহ্নিত হবে। কোনো লেনদেনের পুরো টাকা মিটে গেলে "পরিশোধ হয়েছে" বাটনে চাপলে তা সেটল হয়ে আর্কাইভে চলে যাবে। যদি একসাথে পুরো টাকা না দিয়ে আংশিক পরিশোধ করা হয়, "আংশিক পরিশোধ" বাটনে চেপে কত টাকা দিয়েছেন তা লিখলে বাকি অংক স্বয়ংক্রিয়ভাবে এন্ট্রিতে থেকে যাবে। "শেয়ার করুন" বাটনে চাপলে সংশ্লিষ্ট ব্যক্তিকে পাঠানোর জন্য একটি রেডি মেসেজ তৈরি হয়ে যাবে, যা WhatsApp/SMS বা অন্য কোনো অ্যাপে শেয়ার বা কপি করে পাঠানো যাবে।`
+  },
+  {
+    icon: 'map', title: 'ট্যুর হিসাব',
+    body: `ভ্রমণের সময় খরচ আলাদাভাবে ট্র্যাক করতে "ট্যুর হিসাব" পেজে একটি ট্যুর তৈরি করুন (নাম, শুরু ও শেষ তারিখ দিয়ে)। এন্ট্রি যুক্ত করার সময় "ট্যুর সম্পর্কিত খরচ" টিক দিয়ে সেই ট্যুর বেছে নিলে, এই পেজে ভাড়া/খাবার/হোটেল/অন্যান্য ক্যাটাগরি ধরে ট্যুরের পুরো খরচের বিস্তারিত দেখা যাবে।`
+  },
+  {
+    icon: 'tags', title: 'ক্যাটাগরি ব্যবস্থাপনা',
+    body: `এখানে নতুন খাত (ক্যাটাগরি) যুক্ত করা যায়, সর্বমোট কোন খাতে কত খরচ হয়েছে তার তালিকা ও পাই-চার্ট দেখা যায়, এবং খাতভিত্তিক মাসিক বাজেটও এখান থেকে ঠিক করা যায়।`
+  },
+  {
+    icon: 'bar-chart-3', title: 'পরিসংখ্যান ও রিপোর্ট',
+    body: `এই পেজে তারিখ ও খাত দিয়ে ফিল্টার করে নির্দিষ্ট সময়ের লেনদেনের তালিকা দেখা যায়। "পাই" ও "পাওনা" আলাদাভাবে অন্তর্ভুক্ত/বাদ দেওয়ার চেকবক্স আছে, যা রিপোর্ট ও ডাউনলোডে প্রভাব ফেলে। CSV ও PDF/প্রিন্ট ফরম্যাটে ডাউনলোড করা যায়। দৈনন্দিন (১৪/৩০/৯০ দিন), মাসিক ও বাৎসরিক চার্ট দেখা যায়, এবং বছরের একটি সম্পূর্ণ সারসংক্ষেপ (মোট খরচ-আয়, সবচেয়ে বেশি খরচের মাস/খাত, গড় মাসিক খরচ) আলাদা বছর বেছে দেখা যায়।`
+  },
+  {
+    icon: 'users', title: 'কন্টাক্টস',
+    body: `পাই-পাওনার এন্ট্রিতে দ্রুত ব্যক্তি বেছে নেওয়ার জন্য এখানে কন্টাক্ট যুক্ত করে রাখা যায় (ম্যানুয়ালি বা Google Contacts থেকে CSV আমদানি করে)।`
+  },
+  {
+    icon: 'archive', title: 'আর্কাইভ',
+    body: `এডিট বা ডিলিট হওয়া কোনো এন্ট্রি স্থায়ীভাবে হারিয়ে যায় না — এখানে জমা থাকে এবং প্রয়োজনে পুনরুদ্ধার করা যায়। তারিখ/পরিমাণ অনুযায়ী সাজানো এবং ধরন/খাত অনুযায়ী ফিল্টার করা যায়।`
+  },
+  {
+    icon: 'calculator', title: 'ক্যালকুলেটর',
+    body: `সাধারণ হিসাব-নিকাশের জন্য একটি ক্যালকুলেটর আছে। হিসাব করার পর "এই ফলাফল দিয়ে নতুন এন্ট্রি যুক্ত করুন" বাটনে চাপলে সরাসরি এন্ট্রি ফর্মে পরিমাণ বসে যাবে।`
+  },
+  {
+    icon: 'notebook-pen', title: 'নোটস',
+    body: `যেকোনো প্রয়োজনীয় তথ্য বা লিস্ট লিখে রাখার জন্য নোটস পেজ আছে। শিরোনাম দিয়ে বা লেখার মধ্যে সার্চ করে নোট খুঁজে পাওয়া যায়। কোনো নোটে ক্লিক করলে এডিট করা যায়।`
+  },
+  {
+    icon: 'search', title: 'গ্লোবাল সার্চ',
+    body: `টপবারের সার্চ আইকনে চাপলে পুরো অ্যাকাউন্টে (লেনদেন, কন্টাক্ট, ট্যুর, নোট, ক্যাটাগরি) একসাথে খোঁজা যায় — টাকার পরিমাণ, নাম, খাত, নোট যা দিয়েই খুঁজুন, সংশ্লিষ্ট ফলাফল দেখাবে এবং ক্লিক করলে সরাসরি সেই জায়গায় নিয়ে যাবে।`
+  },
+  {
+    icon: 'cloud', title: 'ক্লাউড সিঙ্ক ও অফলাইন ব্যবহার',
+    body: `সব তথ্য স্বয়ংক্রিয়ভাবে ক্লাউডে সংরক্ষিত হয় — একই ইমেইল-পাসওয়ার্ড দিয়ে যেকোনো ডিভাইস থেকে লগইন করলে সর্বশেষ তথ্য দেখা যাবে। ইন্টারনেট না থাকলেও অ্যাপ ব্যবহার করা যায়; পরিবর্তনগুলো ডিভাইসে জমা থাকবে এবং ইন্টারনেট ফিরে আসার সাথে সাথেই স্বয়ংক্রিয়ভাবে ক্লাউডে সিঙ্ক হয়ে যাবে। টপবারের সিঙ্ক আইকনে ট্যাপ করলে ম্যানুয়ালি রিফ্রেশও করা যায়।`
+  },
+  {
+    icon: 'smartphone', title: 'হোম স্ক্রিনে অ্যাপ ইনস্টল করা',
+    body: `মোবাইল ব্রাউজার থেকে লগইন পেজে ঢুকলে "মোবাইলে অ্যাপ হিসেবে ইনস্টল করুন" বাটন দেখা যাবে (Android/Chrome-এ এক ট্যাপেই ইনস্টল হবে, iPhone-এ Share বাটন থেকে "Add to Home Screen" করতে হবে)। ইনস্টল করার পর আইকনে দীর্ঘ-চাপ দিলে "নতুন এন্ট্রি" ও "ড্যাশবোর্ড"-এ সরাসরি যাওয়ার শর্টকাটও পাওয়া যাবে।`
+  },
+  {
+    icon: 'image-down', title: 'সারাংশ শেয়ার করা',
+    body: `ড্যাশবোর্ডের উপরে "সারাংশ শেয়ার করুন" বাটনে চাপলে আজকের খরচ, এই মাসের খরচ, মোট পাই-পাওনা ও দৈনিক লিমিট নিয়ে একটি সুন্দর ছবি তৈরি হয়ে যাবে, যা সরাসরি অন্য কোনো অ্যাপে শেয়ার করা যাবে অথবা ডাউনলোড করে রাখা যাবে।`
+  },
+  {
+    icon: 'move-horizontal', title: 'সোয়াইপ করে ডিলিট (মোবাইল)',
+    body: `মোবাইলে দৈনন্দিন খরচের বিস্তারিত তালিকা, কন্টাক্টস ও ট্যুরের খরচের তালিকায় কোনো এন্ট্রির উপর বাম দিকে আঙুল দিয়ে সোয়াইপ করলে নিচে লাল "ডিলিট" দেখাবে — পর্যাপ্ত দূরত্ব সোয়াইপ করলে এন্ট্রিটি ডিলিট হয়ে যাবে। ডেস্কটপে এই জেসচার প্রয়োজন নেই, তাই বাটন দিয়েই ডিলিট করা যাবে।`
+  },
+  {
+    icon: 'database', title: 'ডেটা ব্যাকআপ ও সেটিংস',
+    body: `সেটিংস পেজ থেকে প্রোফাইলের নাম-ছবি, মাসিক বাজেট, দৈনিক রিমাইন্ডার চালু/বন্ধ করা যায়। কারেন্সি (মুদ্রা) সেটিংসে টাকা ছাড়াও ডলার, ইউরো, পাউন্ড, রুপি, সৌদি রিয়াল ইত্যাদি বেছে নেওয়া যায় — সব জায়গায় পরিমাণ সেই মুদ্রার চিহ্নে দেখাবে। টপবারের চাঁদ/সূর্য আইকনে চাপলে ডার্ক/লাইট মোড পরিবর্তন করা যায়। থিম রঙ সেকশনে অ্যাপের ব্রাশ/সোনালি রঙের জায়গায় ৬টি প্রিসেট রঙের যেকোনো একটি বেছে নেওয়া যায়। অতিরিক্ত সতর্কতা হিসেবে সব তথ্যের একটি JSON ব্যাকআপ ডাউনলোড করে রাখা যায়, এবং প্রয়োজনে তা থেকে পুনরায় আমদানি করা যায়।`
+  }
+];
+
+function renderGuide(){
+  const container = document.getElementById('guideContent');
+  if(!container) return;
+  const query = (document.getElementById('guideSearch').value || '').trim().toLowerCase();
+
+  container.innerHTML = GUIDE_SECTIONS.map((sec, i) => {
+    const matches = !query || sec.title.toLowerCase().includes(query) || sec.body.toLowerCase().includes(query);
+    return `
+      <div class="guide-section${matches ? '' : ' hidden'}" data-idx="${i}">
+        <div class="guide-section-head" data-idx="${i}">
+          <h4><i data-lucide="${sec.icon}"></i> ${escapeHtml(sec.title)}</h4>
+          <i data-lucide="chevron-down" class="guide-chevron"></i>
+        </div>
+        <div class="guide-section-body">${sec.body}</div>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.guide-section-head').forEach(head => {
+    head.addEventListener('click', () => {
+      const body = head.nextElementSibling;
+      const isOpen = body.classList.contains('open');
+      body.classList.toggle('open', !isOpen);
+      head.classList.toggle('open', !isOpen);
+    });
+  });
+
+  // সার্চ করার সময় ফলাফলে থাকা সেকশনগুলো স্বয়ংক্রিয়ভাবে খুলে দেওয়া
+  if(query){
+    container.querySelectorAll('.guide-section:not(.hidden) .guide-section-body').forEach(body => {
+      body.classList.add('open');
+      body.previousElementSibling.classList.add('open');
+    });
+  }
+
+  refreshIcons();
+}
+
+document.getElementById('guideSearch').addEventListener('input', renderGuide);
+
+/* =====================================================================
+   লাইভ ব্যবহারকারী কাউন্টার (পাবলিক, শেয়ার্ড Firestore ডকুমেন্ট)
+   ===================================================================== */
+function listenUserCounter(){
+  const el = document.getElementById('userCounterValue');
+  if(!el || !firebaseReady || !db) return;
+  db.collection('public').doc('stats').onSnapshot(docSnap => {
+    if(docSnap.exists && typeof docSnap.data().userCount === 'number'){
+      el.textContent = bnDigits(docSnap.data().userCount);
+    } else {
+      el.textContent = bnDigits(1);
+    }
+  }, () => {
+    el.textContent = '—';
+  });
+}
+
+// নতুন অ্যাকাউন্ট তৈরি হলে এই শেয়ার্ড কাউন্টার ১ বাড়িয়ে দেওয়া (সব ব্যবহারকারী এই একই ডকুমেন্ট দেখেন, কিন্তু কারো ব্যক্তিগত ডেটা এখানে নেই)
+function incrementUserCounter(){
+  if(!firebaseReady || !db) return;
+  db.collection('public').doc('stats').set({
+    userCount: firebase.firestore.FieldValue.increment(1)
+  }, { merge: true }).catch(err => console.warn('ইউজার কাউন্টার আপডেট সমস্যা:', err));
 }
 
 /* =====================================================================
@@ -2887,10 +4274,11 @@ function init(){
   // লগইন/সাইনআপ চালু করা (অন্য কোনো অংশে এরর হলেও এটি কাজ করবে)
   setupAuthUI();
   setupMobileInstallUI();
+  listenUserCounter();
 
   // হোম স্ক্রিন শর্টকাট (#add-entry, #dashboard ইত্যাদি) থেকে সরাসরি পেজ খোলা
   const initialPage = (location.hash || '').replace('#', '') || 'dashboard';
-  const validPages = ['dashboard','add-entry','receivables','tours','categories','daily-expenses','reports','contacts','archive','calculator','notes','settings'];
+  const validPages = ['dashboard','add-entry','receivables','tours','categories','daily-expenses','reports','contacts','archive','calculator','notes','guide','settings'];
   const startPage = validPages.includes(initialPage) ? initialPage : 'dashboard';
 
   // প্রাথমিক হিস্ট্রি স্টেট — মোবাইলের ব্যাক বাটন সঠিকভাবে কাজ করার জন্য
@@ -2922,6 +4310,7 @@ function init(){
     document.getElementById('pageDate').textContent = formatFullDateBn(new Date());
 
     loadSettingsForm();
+    generateRecurringEntries();
     renderAll();
     renderCalculator();
     refreshIcons();

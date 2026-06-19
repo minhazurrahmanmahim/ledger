@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mahims-ledger-v11';
+const CACHE_NAME = 'mahims-ledger-v13';
 const APP_SHELL = [
   './',
   './index.html',
