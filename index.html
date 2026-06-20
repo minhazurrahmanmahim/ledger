@@ -128,47 +128,7 @@
       </div>
     </div>
 
-    <nav class="sidebar-nav">
-      <button class="nav-item active" data-page="dashboard">
-        <i data-lucide="layout-dashboard"></i><span>ড্যাশবোর্ড</span>
-      </button>
-      <button class="nav-item" data-page="add-entry">
-        <i data-lucide="circle-plus"></i><span>নতুন এন্ট্রি</span>
-      </button>
-      <button class="nav-item" data-page="receivables">
-        <i data-lucide="handshake"></i><span>পাই ও পাওনা</span>
-      </button>
-      <button class="nav-item" data-page="tours">
-        <i data-lucide="map"></i><span>ট্যুর হিসাব</span>
-      </button>
-      <button class="nav-item" data-page="categories">
-        <i data-lucide="tags"></i><span>ক্যাটাগরি</span>
-      </button>
-      <button class="nav-item" data-page="daily-expenses">
-        <i data-lucide="calendar-range"></i><span>দৈনন্দিন খরচ</span>
-      </button>
-      <button class="nav-item" data-page="reports">
-        <i data-lucide="bar-chart-3"></i><span>পরিসংখ্যান ও রিপোর্ট</span>
-      </button>
-      <button class="nav-item" data-page="contacts">
-        <i data-lucide="users"></i><span>কন্টাক্টস</span>
-      </button>
-      <button class="nav-item" data-page="archive">
-        <i data-lucide="archive"></i><span>আর্কাইভ</span>
-      </button>
-      <button class="nav-item" data-page="calculator">
-        <i data-lucide="calculator"></i><span>ক্যালকুলেটর</span>
-      </button>
-      <button class="nav-item" data-page="notes">
-        <i data-lucide="notebook-pen"></i><span>নোটস</span>
-      </button>
-      <button class="nav-item" data-page="guide">
-        <i data-lucide="book-open"></i><span>ব্যবহার-বিধি</span>
-      </button>
-      <button class="nav-item" data-page="settings">
-        <i data-lucide="settings"></i><span>সেটিংস</span>
-      </button>
-    </nav>
+    <nav class="sidebar-nav" id="sidebarNav"></nav>
 
     <div class="sidebar-footer">
       <p>আপনার সব তথ্য ক্লাউডে সুরক্ষিতভাবে সংরক্ষিত হয় — যেকোনো ডিভাইস থেকে লগইন করলে সর্বশেষ তথ্য দেখতে পাবেন।</p>
@@ -218,7 +178,7 @@
         </div>
 
         <div class="stat-grid">
-          <div class="stat-card clickable" data-page="daily-expenses" title="দৈনন্দিন খরচের ক্যালেন্ডার দেখুন">
+          <div class="stat-card clickable" data-page="daily-expenses" title="দৈনন্দিন খরচ ও আয়ের ক্যালেন্ডার দেখুন">
             <div class="stat-icon"><i data-lucide="wallet"></i></div>
             <div>
               <p class="stat-label">আজকের মোট খরচ</p>
@@ -356,10 +316,20 @@
               <div class="form-row" id="categoryRow">
                 <label for="entryCategory">খাত (Category)</label>
                 <select id="entryCategory"></select>
+                <div id="newCategoryInlineRow" class="inline-new-row" style="display:none;">
+                  <input type="text" id="newCategoryInlineInput" placeholder="নতুন ক্যাটাগরির নাম লিখুন" />
+                  <button type="button" class="btn btn-primary" id="newCategoryInlineSaveBtn">যুক্ত করুন</button>
+                  <button type="button" class="btn btn-ghost" id="newCategoryInlineCancelBtn">বাতিল</button>
+                </div>
               </div>
               <div class="form-row" id="incomeSourceRow" style="display:none;">
                 <label for="entryIncomeSource">আয়ের উৎস</label>
                 <select id="entryIncomeSource"></select>
+                <div id="newIncomeSourceInlineRow" class="inline-new-row" style="display:none;">
+                  <input type="text" id="newIncomeSourceInlineInput" placeholder="নতুন উৎসের নাম লিখুন" />
+                  <button type="button" class="btn btn-primary" id="newIncomeSourceInlineSaveBtn">যুক্ত করুন</button>
+                  <button type="button" class="btn btn-ghost" id="newIncomeSourceInlineCancelBtn">বাতিল</button>
+                </div>
               </div>
               <div class="form-row" id="personRow" style="display:none;">
                 <label for="entryPerson">ব্যক্তি (নাম লিখুন)</label>
@@ -519,11 +489,31 @@
       <!-- ================= ক্যাটাগরি ================= -->
       <section class="page" id="categories">
         <div class="ledger-card form-card">
-          <div class="card-head"><h3><i data-lucide="tags"></i> নতুন ক্যাটাগরি যোগ করুন</h3></div>
-          <form id="categoryForm" class="inline-form">
-            <input type="text" id="categoryName" required placeholder="যেমন: ফ্রিল্যান্সিং খরচ" />
-            <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> যুক্ত করুন</button>
-          </form>
+          <div class="card-head">
+            <h3><i data-lucide="tags"></i> ক্যাটাগরি ব্যবস্থাপনা</h3>
+            <div class="seg-control" id="categoryTabControl">
+              <button class="seg active" data-tab="expense">খরচের খাত</button>
+              <button class="seg" data-tab="income">আয়ের উৎস</button>
+            </div>
+          </div>
+
+          <div id="expenseCategoryTab">
+            <form id="categoryForm" class="inline-form">
+              <input type="text" id="categoryName" required placeholder="যেমন: ফ্রিল্যান্সিং খরচ" />
+              <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> যুক্ত করুন</button>
+            </form>
+            <p class="hint-text">↑ ↓ বাটন দিয়ে ক্রম পরিবর্তন করুন — নতুন ক্যাটাগরি এন্ট্রি ফর্মের ড্রপডাউনেও একই ক্রমে দেখাবে।</p>
+            <div id="categoryReorderList" class="reorder-list"></div>
+          </div>
+
+          <div id="incomeSourceTab" style="display:none;">
+            <form id="incomeSourceForm" class="inline-form">
+              <input type="text" id="incomeSourceName" required placeholder="যেমন: টিউশনি" />
+              <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> যুক্ত করুন</button>
+            </form>
+            <p class="hint-text">↑ ↓ বাটন দিয়ে ক্রম পরিবর্তন করুন।</p>
+            <div id="incomeSourceReorderList" class="reorder-list"></div>
+          </div>
         </div>
 
         <div class="dashboard-grid two-col">
@@ -544,7 +534,7 @@
         </div>
       </section>
 
-      <!-- ================= দৈনন্দিন খরচ ================= -->
+      <!-- ================= দৈনন্দিন খরচ ও আয় ================= -->
       <section class="page" id="daily-expenses">
         <div class="ledger-card daily-limit-card">
           <div class="card-head"><h3><i data-lucide="gauge"></i> দৈনিক খরচের লিমিট</h3></div>
@@ -576,7 +566,14 @@
         </div>
 
         <div class="ledger-card" id="dayDetailCard" style="display:none;">
-          <div class="card-head"><h3 id="dayDetailTitle"><i data-lucide="calendar-check"></i> বিস্তারিত</h3></div>
+          <div class="card-head">
+            <h3 id="dayDetailTitle"><i data-lucide="calendar-check"></i> বিস্তারিত</h3>
+            <div class="seg-control" id="dayDetailTypeControl">
+              <button class="seg active" data-type="expense">খরচ</button>
+              <button class="seg" data-type="income">আয়</button>
+              <button class="seg" data-type="all">সব</button>
+            </div>
+          </div>
           <div class="day-detail-summary" id="dayDetailSummary"></div>
           <div id="dayDetailList" class="entry-list"></div>
           <div class="day-exception-row" id="dayExceptionRow" style="display:none;">
@@ -612,6 +609,10 @@
           </div>
           <div class="report-include-row">
             <span class="report-include-label">তালিকা ও ডাউনলোডে অন্তর্ভুক্ত করুন:</span>
+            <label class="checkbox-label">
+              <input type="checkbox" id="includeIncome" checked />
+              <span>আয়</span>
+            </label>
             <label class="checkbox-label">
               <input type="checkbox" id="includeReceivable" checked />
               <span>পাই (অন্যের কাছে)</span>
@@ -909,6 +910,15 @@
             <button class="btn btn-ghost" id="removePinBtn" style="display:none;">পিন বন্ধ করুন</button>
           </div>
           <p class="hint-text" id="pinStatusText"></p>
+        </div>
+
+        <div class="ledger-card form-card">
+          <div class="card-head"><h3><i data-lucide="menu"></i> নেভিগেশন কাস্টমাইজ করুন</h3></div>
+          <p class="hint-text">↑ ↓ বাটন দিয়ে সাইডবারের মেনু আইটেমের ক্রম পরিবর্তন করুন — প্রায়ই ব্যবহার করা পেজ উপরে আনতে পারেন।</p>
+          <div id="navReorderList" class="reorder-list"></div>
+          <div class="form-actions" style="margin-top:1rem;">
+            <button class="btn btn-ghost" id="resetNavOrderBtn"><i data-lucide="rotate-ccw"></i> ডিফল্ট ক্রমে ফিরে যান</button>
+          </div>
         </div>
 
         <div class="ledger-card form-card">
