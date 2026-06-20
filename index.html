@@ -423,14 +423,14 @@
           <div id="dailyLimitStatus" class="daily-limit-status" style="display:none;"></div>
         </div>
 
-        <div class="ledger-card">
-          <div class="card-head"><h3><i data-lucide="list"></i> সব খরচের তালিকা</h3></div>
+        <div class="ledger-card" id="entryListCard">
+          <div class="card-head"><h3 id="entryListTitle"><i data-lucide="list"></i> সব খরচের তালিকা</h3></div>
           <div class="table-toolbar">
-            <input type="text" id="expenseSearch" placeholder="খাত বা নোট অনুসন্ধান করুন..." />
+            <input type="text" id="expenseSearch" placeholder="খাত/উৎস বা নোট অনুসন্ধান করুন..." />
           </div>
           <div class="table-wrap">
             <table class="ledger-table" id="expenseTable">
-              <thead>
+              <thead id="expenseTableHead">
                 <tr><th>তারিখ</th><th>সময়</th><th>খাত</th><th>নোট</th><th class="num">পরিমাণ</th><th></th></tr>
               </thead>
               <tbody></tbody>

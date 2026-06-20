@@ -532,12 +532,24 @@ function setupAuthUI(){
           if(docSnap.exists && docSnap.data().state){
             state = mergeWithDefaults(docSnap.data().state);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-          } else if(!docSnap.exists) {
-            // ক্লাউডে এখনো কোনো ডেটা নেই — বর্তমান (লোকাল) ডেটা ক্লাউডে পাঠানো হচ্ছে
-            db.collection('users').doc(user.uid).set({
-              state: state,
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+          } else if(!docSnap.exists && !docSnap.metadata.fromCache) {
+            // ক্লাউডে সত্যিই কোনো ডেটা নেই (এটি ক্যাশ থেকে নয়, সরাসরি সার্ভার থেকে নিশ্চিত হওয়া তথ্য) —
+            // এই অবস্থায় শুধু তখনই নতুন করে লেখা হবে, যদি লোকাল ডেটাতে বাস্তবে কিছু থাকে।
+            // সম্পূর্ণ খালি/ডিফল্ট state কখনোই ক্লাউডে জোর করে লেখা হবে না — এতে আগের আসল ডেটা মুছে যাওয়ার ঝুঁকি থাকে।
+            const hasRealData =
+              (state.entries && state.entries.length) ||
+              (state.archive && state.archive.length) ||
+              (state.contacts && state.contacts.length) ||
+              (state.tours && state.tours.length) ||
+              (state.notes && state.notes.length);
+            if(hasRealData){
+              db.collection('users').doc(user.uid).set({
+                state: state,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+              });
+            }
+            // নতুন/একদম ফাঁকা অ্যাকাউন্টের ক্ষেত্রে কিছুই লেখা হবে না — পরবর্তী প্রথম সেভের সময়
+            // (saveState() → syncToCloud()) স্বাভাবিকভাবেই ডকুমেন্ট তৈরি হয়ে যাবে।
           }
           renderAll();
           loadSettingsForm();
@@ -1057,6 +1069,7 @@ document.querySelectorAll('#entryTypeControl .seg').forEach(seg => {
     seg.classList.add('active');
     currentEntryType = seg.dataset.value;
     updateEntryFormForType();
+    renderExpenseTable(); // নিচের তালিকা (খরচ/আয়) ধরন অনুযায়ী বদলে দেওয়া
   });
 });
 
@@ -1545,6 +1558,7 @@ function resetEntryForm(){
   clearLinkedContact();
   entryFormTitle.innerHTML = `<i data-lucide="pencil-line"></i> নতুন এন্ট্রি যোগ করুন`;
   refreshIcons();
+  renderExpenseTable();
 }
 
 document.getElementById('resetFormBtn').addEventListener('click', resetEntryForm);
@@ -1657,6 +1671,7 @@ function editEntry(id){
   }
   entryFormTitle.innerHTML = `<i data-lucide="pencil-line"></i> এন্ট্রি সম্পাদনা করুন`;
   refreshIcons();
+  renderExpenseTable(); // নিচের তালিকা এডিট হওয়া এন্ট্রির ধরন অনুযায়ী বদলে দেওয়া
   goToPage('add-entry');
 }
 
@@ -2114,26 +2129,48 @@ function renderDashboard(){
 function renderExpenseTable(){
   const search = document.getElementById('expenseSearch').value.trim().toLowerCase();
   const tbody = document.querySelector('#expenseTable tbody');
-  let rows = state.entries.filter(e => e.kind === 'expense');
+  const thead = document.getElementById('expenseTableHead');
+  const titleEl = document.getElementById('entryListTitle');
+
+  // বর্তমানে এন্ট্রি ফর্মে কোন ধরন সিলেক্ট করা আছে তার উপর ভিত্তি করে তালিকা বদলে যাবে
+  const showIncome = (typeof currentEntryType !== 'undefined') && currentEntryType === 'income';
+  const kind = showIncome ? 'income' : 'expense';
+
+  if(titleEl){
+    titleEl.innerHTML = showIncome
+      ? `<i data-lucide="list"></i> সব আয়ের তালিকা`
+      : `<i data-lucide="list"></i> সব খরচের তালিকা`;
+  }
+  if(thead){
+    thead.innerHTML = showIncome
+      ? `<tr><th>তারিখ</th><th>সময়</th><th>উৎস</th><th>নোট</th><th class="num">পরিমাণ</th><th></th></tr>`
+      : `<tr><th>তারিখ</th><th>সময়</th><th>খাত</th><th>নোট</th><th class="num">পরিমাণ</th><th></th></tr>`;
+  }
+  document.getElementById('expenseSearch').placeholder = showIncome
+    ? 'উৎস বা নোট অনুসন্ধান করুন...'
+    : 'খাত বা নোট অনুসন্ধান করুন...';
+
+  let rows = state.entries.filter(e => e.kind === kind);
   if(search){
     rows = rows.filter(e =>
-      (e.category && e.category.toLowerCase().includes(search)) ||
+      ((e.category || e.incomeSource) && (e.category || e.incomeSource).toLowerCase().includes(search)) ||
       (e.note && e.note.toLowerCase().includes(search))
     );
   }
   rows = rows.sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time));
 
   if(rows.length === 0){
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">কোনো খরচের তথ্য পাওয়া যায়নি।</td></tr>`;
+    const emptyMsg = showIncome ? 'কোনো আয়ের তথ্য পাওয়া যায়নি।' : 'কোনো খরচের তথ্য পাওয়া যায়নি।';
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">${emptyMsg}</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(e => `
-    <tr class="${isDayOverLimit(e.date) ? 'over-limit-row' : ''}">
+    <tr class="${!showIncome && isDayOverLimit(e.date) ? 'over-limit-row' : ''}">
       <td>${formatDateDMY(e.date)}</td>
       <td>${formatTimeBn(e.time)}</td>
-      <td>${escapeHtml(e.category || '')}${e.isTour ? ` <span class="badge income" style="font-size:.65rem;padding:.1rem .5rem;">ট্যুর</span>` : ''}${exclusionBadges(e)}</td>
+      <td>${escapeHtml((showIncome ? e.incomeSource : e.category) || '')}${(!showIncome && e.isTour) ? ` <span class="badge income" style="font-size:.65rem;padding:.1rem .5rem;">ট্যুর</span>` : ''}${!showIncome ? exclusionBadges(e) : ''}</td>
       <td>${escapeHtml(e.note || '')}</td>
-      <td class="num expense">${taka(e.amount)}</td>
+      <td class="num ${showIncome ? 'income' : 'expense'}">${taka(e.amount)}</td>
       <td>
         <div class="entry-actions">
           <button class="icon-btn" data-action="edit" data-id="${e.id}" title="সম্পাদনা"><i data-lucide="pencil"></i></button>
@@ -4259,6 +4296,7 @@ function renderQuickTemplatesRow(){
       }
       entryAmountInput.value = t.amount;
       entryNoteInput.value = t.note || '';
+      renderExpenseTable();
       toast(`"${t.label}" টেমপ্লেট থেকে ফর্ম পূরণ হয়েছে — যাচাই করে সংরক্ষণ করুন।`);
     });
   });
